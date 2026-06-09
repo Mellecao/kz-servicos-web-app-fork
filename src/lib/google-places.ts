@@ -14,11 +14,9 @@ type ProviderResult = {
 };
 
 const LOCATIONIQ_ACCESS_TOKEN =
-  process.env.NEXT_PUBLIC_LOCATIONIQ_ACCESS_TOKEN ??
-  "pk.5fd9a8a1253d8c7e05df471f06125ce9";
+  process.env.NEXT_PUBLIC_LOCATIONIQ_ACCESS_TOKEN ?? "";
 
-const GEONAMES_USERNAME =
-  process.env.NEXT_PUBLIC_GEONAMES_USERNAME ?? "melleca";
+const GEONAMES_USERNAME = process.env.NEXT_PUBLIC_GEONAMES_USERNAME ?? "";
 
 const BRAZIL_BBOX = "-73.99,-33.75,-34.79,5.27";
 
