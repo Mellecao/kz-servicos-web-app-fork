@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Outfit Black';
+  src: url('/assets/fonts/OUTFIT-BLACK.TTF') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Quasimoda';
+  src: url('/assets/fonts/QUASIMODA REGULAR.TTF') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Dark mode (default) */
+:root {
+  --kz-background: #0F172A;
+  --kz-surface: #1E293B;
+  --kz-surface-hover: #334155;
+  --kz-border: #1E293B;
+  --kz-dark: #F8FAFC;
+  --kz-contrast: #94A3B8;
+  --kz-info: #94A3B8;
+}
+
+/* Light mode overrides */
+html.light {
+  --kz-background: #F8FAFC;
+  --kz-surface: #FFFFFF;
+  --kz-surface-hover: #F1F5F9;
+  --kz-border: #E2E8F0;
+  --kz-dark: #0F172A;
+  --kz-contrast: #64748B;
+  --kz-info: #64748B;
+}
+
+@theme inline {
+  --color-primary: #FEBF22;
+  --color-primary-dark: #e5ab1e;
+  --color-accent: #22C55E;
+  --color-accent-dark: #16A34A;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-white: #FFFFFF;
+  --font-heading: 'Outfit Black', sans-serif;
+  --font-body: 'Quasimoda', sans-serif;
+
+  --color-background: var(--kz-background);
+  --color-surface: var(--kz-surface);
+  --color-surface-hover: var(--kz-surface-hover);
+  --color-border: var(--kz-border);
+  --color-dark: var(--kz-dark);
+  --color-contrast: var(--kz-contrast);
+  --color-info: var(--kz-info);
+}
+
+body {
+  background: var(--kz-background);
+  color: var(--kz-dark);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* Slide panel animations */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modal-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes modal-out {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.95); opacity: 0; }
+}
+
+/* Toast animations */
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Custom scrollbar */
+*,
+*::before,
+*::after {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--kz-surface-hover) transparent !important;
+}
+
+*::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--kz-surface-hover) !important;
+  border-radius: 9999px !important;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--kz-contrast) !important;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-button {
+  display: none !important;
+}
+
+/* Kanban DnD animations */
+@keyframes card-highlight {
+  0%, 100% { box-shadow: 0 0 0 2px transparent; }
+  50% { box-shadow: 0 0 0 2px #FEBF22; }
+}
+
+@keyframes card-settle {
+  0% { transform: scale(1.04); }
+  50% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+
+/* Mobile sheet animations */
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes slide-down {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
+}
+
+.slide-up   { animation: slide-up   0.3s ease forwards; }
+.slide-down { animation: slide-down 0.3s ease forwards; }

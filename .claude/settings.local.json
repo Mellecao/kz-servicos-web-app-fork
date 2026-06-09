@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/guilh/.claude/projects/c--Users-guilh-OneDrive-Documents-BlackElephant-Clientes-KZ-kz-servicos-web-app/memory/**)",
+      "Bash(npx tsc *)",
+      "Bash(supabase --version)",
+      "Bash(git -C .github/skills/kz-database status --short)",
+      "Bash(git -C .github/skills/kz-database status)",
+      "Bash(bash *)",
+      "Bash(ls -d .worktrees)",
+      "Bash(ls -d worktrees)",
+      "Bash(git worktree *)",
+      "Bash(git merge *)",
+      "Bash(git branch *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(claude mcp *)",
+      "mcp__n8n-mcp__n8n_health_check",
+      "mcp__n8n-mcp__n8n_list_workflows",
+      "mcp__n8n-mcp__n8n_get_workflow",
+      "Bash(env)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers',{}\\).get\\('n8n',{}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); mcps=d.get\\('mcpServers',{}\\); n8n=mcps.get\\('n8n-mcp',mcps.get\\('n8n',{}\\)\\); print\\(json.dumps\\(n8n, indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers',{}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); mcps=d.get\\('mcpServers',{}\\); [print\\(k,'->',json.dumps\\(v,indent=2\\)\\) for k,v in mcps.items\\(\\) if 'n8n' in k.lower\\(\\)]\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST https://black-elephant.app.n8n.cloud/api/v1/workflows -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZGE0ZjhhZC03MTkxLTQ0ZTMtYTcyMC1lMzczY2Q0YWRkY2EiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzdkNDlhZDgtOTZkMS00ODUxLWIxMzEtMjlmOTE5NTM5NGNmIiwiaWF0IjoxNzc4NzE0MTM1LCJleHAiOjE3ODEyMzMyMDB9.Dd_9b8BuVxoVqk112TME0MTBdwTzxUDCDYE3gJffK5c' -H 'Content-Type: application/json' -d '{ *)",
+      "mcp__n8n-mcp__n8n_create_workflow",
+      "Bash(curl -s -X PUT https://black-elephant.app.n8n.cloud/api/v1/workflows/XfbU95evJmX7ORnE -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZGE0ZjhhZC03MTkxLTQ0ZTMtYTcyMC1lMzczY2Q0YWRkY2EiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzdkNDlhZDgtOTZkMS00ODUxLWIxMzEtMjlmOTE5NTM5NGNmIiwiaWF0IjoxNzc4NzE0MTM1LCJleHAiOjE3ODEyMzMyMDB9.Dd_9b8BuVxoVqk112TME0MTBdwTzxUDCDYE3gJffK5c' -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if k not in ['nodes','connections','shared','activeVersion']}, indent=2\\)\\)\")",
+      "Bash(curl -s -X PATCH https://black-elephant.app.n8n.cloud/api/v1/workflows/XfbU95evJmX7ORnE -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZGE0ZjhhZC03MTkxLTQ0ZTMtYTcyMC1lMzczY2Q0YWRkY2EiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzdkNDlhZDgtOTZkMS00ODUxLWIxMzEtMjlmOTE5NTM5NGNmIiwiaWF0IjoxNzc4NzE0MTM1LCJleHAiOjE3ODEyMzMyMDB9.Dd_9b8BuVxoVqk112TME0MTBdwTzxUDCDYE3gJffK5c' -H 'Content-Type: application/json' -d '{\"parentFolderId\": \"lurCFy6kilt6SFm2\"}')",
+      "Bash(curl -s -X POST https://black-elephant.app.n8n.cloud/api/v1/workflows/XfbU95evJmX7ORnE/transfer -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZGE0ZjhhZC03MTkxLTQ0ZTMtYTcyMC1lMzczY2Q0YWRkY2EiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzdkNDlhZDgtOTZkMS00ODUxLWIxMzEtMjlmOTE5NTM5NGNmIiwiaWF0IjoxNzc4NzE0MTM1LCJleHAiOjE3ODEyMzMyMDB9.Dd_9b8BuVxoVqk112TME0MTBdwTzxUDCDYE3gJffK5c' -H 'Content-Type: application/json' -d '{\"destinationProjectId\": \"ZZXoIBqZumi1D9pu\"}')",
+      "Bash(curl -s -X PUT https://black-elephant.app.n8n.cloud/api/v1/workflows/XfbU95evJmX7ORnE/move -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZGE0ZjhhZC03MTkxLTQ0ZTMtYTcyMC1lMzczY2Q0YWRkY2EiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzdkNDlhZDgtOTZkMS00ODUxLWIxMzEtMjlmOTE5NTM5NGNmIiwiaWF0IjoxNzc4NzE0MTM1LCJleHAiOjE3ODEyMzMyMDB9.Dd_9b8BuVxoVqk112TME0MTBdwTzxUDCDYE3gJffK5c' -H 'Content-Type: application/json' -d '{\"parentFolderId\": \"lurCFy6kilt6SFm2\"}')",
+      "Bash(curl -s -X POST https://black-elephant.app.n8n.cloud/api/v1/workflows/XfbU95evJmX7ORnE/activate -H 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ZGE0ZjhhZC03MTkxLTQ0ZTMtYTcyMC1lMzczY2Q0YWRkY2EiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYzdkNDlhZDgtOTZkMS00ODUxLWIxMzEtMjlmOTE5NTM5NGNmIiwiaWF0IjoxNzc4NzE0MTM1LCJleHAiOjE3ODEyMzMyMDB9.Dd_9b8BuVxoVqk112TME0MTBdwTzxUDCDYE3gJffK5c' -H 'Content-Type: application/json')"
+    ]
+  }
+}

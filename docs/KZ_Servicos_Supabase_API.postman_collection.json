@@ -1,0 +1,2967 @@
+{
+	"info": {
+		"_postman_id": "kz-servicos-supabase-api",
+		"name": "KZ Serviços — Supabase API",
+		"description": "Coleção completa da API REST Supabase para o sistema KZ Serviços.\n\nContém operações CRUD para todas as 22 tabelas do banco de dados, endpoints de autenticação e documentação de Realtime.\n\n## Configuração\n1. Importe esta coleção no Postman\n2. Edite as variáveis da coleção com os dados do seu projeto Supabase\n3. Use \"Cadastrar Usuário\" e \"Login\" para obter o ACCESS_TOKEN\n4. O token será automaticamente utilizado nas demais requisições\n\n## Headers Comuns\nTodas as requisições herdam os headers:\n- `apikey` — chave anon do Supabase\n- `Authorization` — Bearer token JWT\n- `Content-Type` — application/json",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{ACCESS_TOKEN}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "SUPABASE_URL",
+			"value": "https://your-project.supabase.co",
+			"type": "string"
+		},
+		{
+			"key": "SUPABASE_ANON_KEY",
+			"value": "your-anon-key",
+			"type": "string"
+		},
+		{
+			"key": "SUPABASE_SERVICE_ROLE_KEY",
+			"value": "your-service-role-key",
+			"type": "string"
+		},
+		{
+			"key": "ACCESS_TOKEN",
+			"value": "your-jwt-token",
+			"type": "string"
+		},
+		{
+			"key": "USER_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "PROVIDER_PROFILE_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "DRIVER_PROFILE_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "VEHICLE_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "TRIP_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "SERVICE_REQUEST_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "CHAT_ROOM_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "SERVICE_CATEGORY_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "ADDRESS_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "01. Auth (Autenticação)",
+			"description": "Endpoints de autenticação do Supabase Auth.\n\nUse estes endpoints para cadastrar, fazer login, logout e obter dados do usuário autenticado.",
+			"item": [
+				{
+					"name": "Cadastrar Usuário (Sign Up)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"usuario@exemplo.com\",\n  \"password\": \"senhaSegura123!\",\n  \"data\": {\n    \"full_name\": \"João da Silva\",\n    \"role\": \"client\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/auth/v1/signup",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["auth", "v1", "signup"]
+						},
+						"description": "Cria um novo usuário no Supabase Auth. O campo `data` é salvo como `raw_user_meta_data`.\n\nRoles válidos: `client`, `provider`, `admin`"
+					}
+				},
+				{
+					"name": "Login (Sign In com Email/Senha)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.access_token) {",
+									"    pm.collectionVariables.set('ACCESS_TOKEN', jsonData.access_token);",
+									"    console.log('ACCESS_TOKEN atualizado automaticamente.');",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"usuario@exemplo.com\",\n  \"password\": \"senhaSegura123!\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/auth/v1/token?grant_type=password",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["auth", "v1", "token"],
+							"query": [
+								{
+									"key": "grant_type",
+									"value": "password"
+								}
+							]
+						},
+						"description": "Faz login com email e senha. Retorna `access_token` (JWT) e `refresh_token`.\n\nO script de teste salva automaticamente o `ACCESS_TOKEN` na variável da coleção."
+					}
+				},
+				{
+					"name": "Logout (Sign Out)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/auth/v1/logout",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["auth", "v1", "logout"]
+						},
+						"description": "Invalida o token do usuário autenticado."
+					}
+				},
+				{
+					"name": "Obter Usuário Autenticado",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/auth/v1/user",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["auth", "v1", "user"]
+						},
+						"description": "Retorna os dados do usuário autenticado no Supabase Auth, incluindo `user_metadata`."
+					}
+				}
+			]
+		},
+		{
+			"name": "02. Usuários (users)",
+			"description": "Tabela `users` — Perfis de usuários vinculados ao Supabase Auth.\n\nColunas: id, role, full_name, email, phone, cpf, avatar_url, date_of_birth, is_active, auth_provider, created_at, updated_at, deleted_at\n\nRoles: client, provider, admin",
+			"item": [
+				{
+					"name": "Listar Usuários",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/users?select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "users"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna todos os usuários. Requer permissão de admin via RLS."
+					}
+				},
+				{
+					"name": "Buscar Usuário por ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/users?id=eq.{{USER_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "users"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna um usuário específico pelo ID (UUID)."
+					}
+				},
+				{
+					"name": "Criar Usuário",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"uuid-do-auth-user\",\n  \"full_name\": \"Maria Souza\",\n  \"email\": \"maria@exemplo.com\",\n  \"role\": \"client\",\n  \"phone\": \"(11) 99999-0000\",\n  \"cpf\": \"123.456.789-00\",\n  \"date_of_birth\": \"1990-05-15\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/users",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "users"]
+						},
+						"description": "Cria um registro na tabela users. O `id` deve ser o mesmo UUID do auth.users.\n\nNormalmente criado automaticamente via trigger no signup."
+					}
+				},
+				{
+					"name": "Atualizar Usuário",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"full_name\": \"Maria Souza Atualizada\",\n  \"phone\": \"(11) 98888-1111\",\n  \"avatar_url\": \"https://storage.supabase.co/avatars/maria.jpg\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/users?id=eq.{{USER_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "users"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{USER_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza dados do perfil de um usuário."
+					}
+				},
+				{
+					"name": "Filtrar Usuários por Role",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/users?role=eq.provider&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "users"],
+							"query": [
+								{
+									"key": "role",
+									"value": "eq.provider"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Filtra usuários por role. Valores: client, provider, admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "03. Categorias de Serviço (service_categories)",
+			"description": "Tabela `service_categories` — Categorias de serviço disponíveis na plataforma.\n\nColunas: id, name, slug, description, service_type, is_active, icon_url, created_at\n\nTipos de serviço: trip, other_service",
+			"item": [
+				{
+					"name": "Listar Categorias",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_categories?select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_categories"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna todas as categorias de serviço."
+					}
+				},
+				{
+					"name": "Buscar Categoria por Slug",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_categories?slug=eq.driver&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_categories"],
+							"query": [
+								{
+									"key": "slug",
+									"value": "eq.driver"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Busca uma categoria pelo slug. Slugs existentes: driver, housekeeper, electrician."
+					}
+				},
+				{
+					"name": "Criar Categoria (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Encanador\",\n  \"slug\": \"plumber\",\n  \"description\": \"Serviço de encanamento e hidráulica\",\n  \"service_type\": \"other_service\",\n  \"is_active\": true,\n  \"icon_url\": \"https://storage.supabase.co/icons/plumber.png\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_categories",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_categories"]
+						},
+						"description": "Cria uma nova categoria de serviço. Requer permissão de admin.\n\nservice_type: trip | other_service"
+					}
+				},
+				{
+					"name": "Atualizar Categoria (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Descrição atualizada\",\n  \"is_active\": false\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_categories?id=eq.{{SERVICE_CATEGORY_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_categories"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{SERVICE_CATEGORY_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza uma categoria existente. Requer permissão de admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "04. Perfis de Prestador (provider_profiles)",
+			"description": "Tabela `provider_profiles` — Perfil do prestador de serviço.\n\nColunas: id, user_id, service_category_id, status, rg_document_url, cnh_document_url, proof_of_address_url, has_card_machine, has_tap_payment, issues_invoice, issues_receipt, bank_name, bank_agency, bank_account, bank_account_type, bank_pix_key, average_rating, total_ratings, bio, created_at, updated_at\n\nStatus: pending, approved, rejected, suspended\nTipo conta: checking, savings",
+			"item": [
+				{
+					"name": "Listar Prestadores (com relações)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_profiles?select=*,users(*),service_categories(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_profiles"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*,users(*),service_categories(*)"
+								}
+							]
+						},
+						"description": "Retorna todos os perfis de prestadores com dados do usuário e categoria."
+					}
+				},
+				{
+					"name": "Buscar Prestador por User ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_profiles?user_id=eq.{{USER_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_profiles"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Busca o perfil de prestador de um usuário específico."
+					}
+				},
+				{
+					"name": "Criar Perfil de Prestador",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{USER_ID}}\",\n  \"service_category_id\": \"{{SERVICE_CATEGORY_ID}}\",\n  \"rg_document_url\": \"https://storage.supabase.co/docs/rg.pdf\",\n  \"cnh_document_url\": \"https://storage.supabase.co/docs/cnh.pdf\",\n  \"proof_of_address_url\": \"https://storage.supabase.co/docs/comprovante.pdf\",\n  \"has_card_machine\": true,\n  \"has_tap_payment\": false,\n  \"issues_invoice\": false,\n  \"issues_receipt\": true,\n  \"bank_name\": \"Banco do Brasil\",\n  \"bank_agency\": \"1234\",\n  \"bank_account\": \"56789-0\",\n  \"bank_account_type\": \"checking\",\n  \"bank_pix_key\": \"12345678900\",\n  \"bio\": \"Motorista experiente com 10 anos de atuação.\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_profiles",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_profiles"]
+						},
+						"description": "Cria um novo perfil de prestador. Status inicial: pending.\n\nbank_account_type: checking | savings"
+					}
+				},
+				{
+					"name": "Atualizar Perfil de Prestador",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"approved\",\n  \"bank_pix_key\": \"email@prestador.com\",\n  \"bio\": \"Motorista profissional atualizado.\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_profiles?id=eq.{{PROVIDER_PROFILE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_profiles"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{PROVIDER_PROFILE_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza dados do perfil de prestador (status, banco, bio, etc).\n\nStatus válidos: pending, approved, rejected, suspended"
+					}
+				},
+				{
+					"name": "Listar Prestadores Aprovados",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_profiles?status=eq.approved&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_profiles"],
+							"query": [
+								{
+									"key": "status",
+									"value": "eq.approved"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Filtra apenas prestadores com status 'approved'."
+					}
+				}
+			]
+		},
+		{
+			"name": "05. Perfis de Motorista (driver_profiles)",
+			"description": "Tabela `driver_profiles` — Extensão do perfil de prestador para motoristas.\n\nColunas: id, provider_profile_id, cnh_category, cnh_expiration_date, cnh_number, is_available, created_at, updated_at",
+			"item": [
+				{
+					"name": "Listar Motoristas (com relações)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/driver_profiles?select=*,provider_profiles(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "driver_profiles"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*,provider_profiles(*)"
+								}
+							]
+						},
+						"description": "Retorna todos os perfis de motoristas com dados do perfil de prestador."
+					}
+				},
+				{
+					"name": "Listar Motoristas Disponíveis",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/driver_profiles?is_available=eq.true&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "driver_profiles"],
+							"query": [
+								{
+									"key": "is_available",
+									"value": "eq.true"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Filtra motoristas disponíveis (is_available = true)."
+					}
+				},
+				{
+					"name": "Criar Perfil de Motorista",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"provider_profile_id\": \"{{PROVIDER_PROFILE_ID}}\",\n  \"cnh_category\": \"AB\",\n  \"cnh_expiration_date\": \"2028-12-31\",\n  \"cnh_number\": \"12345678901\",\n  \"is_available\": false\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/driver_profiles",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "driver_profiles"]
+						},
+						"description": "Cria um perfil de motorista vinculado a um provider_profile existente.\n\nCategorias CNH comuns: A, B, AB, C, D, E"
+					}
+				},
+				{
+					"name": "Atualizar Perfil de Motorista",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_available\": true,\n  \"cnh_expiration_date\": \"2030-06-15\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/driver_profiles?id=eq.{{DRIVER_PROFILE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "driver_profiles"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{DRIVER_PROFILE_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza dados do motorista (disponibilidade, CNH, etc)."
+					}
+				}
+			]
+		},
+		{
+			"name": "06. Veículos (vehicles)",
+			"description": "Tabela `vehicles` — Veículos cadastrados pelos motoristas.\n\nColunas: id, driver_profile_id, brand, model, year, color, license_plate, vehicle_document_url, passenger_capacity, is_active, created_at, updated_at",
+			"item": [
+				{
+					"name": "Listar Veículos (com relações)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicles?select=*,driver_profiles(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicles"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*,driver_profiles(*)"
+								}
+							]
+						},
+						"description": "Retorna todos os veículos com dados do motorista."
+					}
+				},
+				{
+					"name": "Veículos por Motorista",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicles?driver_profile_id=eq.{{DRIVER_PROFILE_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicles"],
+							"query": [
+								{
+									"key": "driver_profile_id",
+									"value": "eq.{{DRIVER_PROFILE_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Filtra veículos de um motorista específico."
+					}
+				},
+				{
+					"name": "Criar Veículo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver_profile_id\": \"{{DRIVER_PROFILE_ID}}\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Corolla\",\n  \"year\": 2023,\n  \"color\": \"Prata\",\n  \"license_plate\": \"ABC1D23\",\n  \"vehicle_document_url\": \"https://storage.supabase.co/docs/crlv.pdf\",\n  \"passenger_capacity\": 4\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicles",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicles"]
+						},
+						"description": "Cadastra um novo veículo para um motorista."
+					}
+				},
+				{
+					"name": "Atualizar Veículo",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"color\": \"Branco\",\n  \"is_active\": true,\n  \"passenger_capacity\": 5\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicles?id=eq.{{VEHICLE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicles"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{VEHICLE_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza dados de um veículo."
+					}
+				},
+				{
+					"name": "Excluir Veículo",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicles?id=eq.{{VEHICLE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicles"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{VEHICLE_ID}}"
+								}
+							]
+						},
+						"description": "Remove um veículo. As fotos vinculadas serão removidas em cascata."
+					}
+				}
+			]
+		},
+		{
+			"name": "07. Fotos de Veículo (vehicle_photos)",
+			"description": "Tabela `vehicle_photos` — Fotos dos veículos.\n\nColunas: id, vehicle_id, photo_url, photo_type, created_at\n\nTipos de foto: front, back, interior, side_left, side_right",
+			"item": [
+				{
+					"name": "Fotos por Veículo",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicle_photos?vehicle_id=eq.{{VEHICLE_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicle_photos"],
+							"query": [
+								{
+									"key": "vehicle_id",
+									"value": "eq.{{VEHICLE_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna todas as fotos de um veículo."
+					}
+				},
+				{
+					"name": "Adicionar Referência de Foto",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"vehicle_id\": \"{{VEHICLE_ID}}\",\n  \"photo_url\": \"https://storage.supabase.co/vehicles/foto-frente.jpg\",\n  \"photo_type\": \"front\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicle_photos",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicle_photos"]
+						},
+						"description": "Registra referência de foto de veículo. Faça upload no Storage primeiro.\n\nTipos: front, back, interior, side_left, side_right"
+					}
+				},
+				{
+					"name": "Excluir Foto",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/vehicle_photos?id=eq.{{PHOTO_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "vehicle_photos"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{PHOTO_ID}}"
+								}
+							]
+						},
+						"description": "Remove uma referência de foto. Lembre-se de excluir o arquivo do Storage também."
+					}
+				}
+			]
+		},
+		{
+			"name": "08. Endereços (addresses)",
+			"description": "Tabela `addresses` — Endereços utilizados em viagens e serviços.\n\nColunas: id, google_place_id, formatted_address, street, number, complement, neighborhood, city, state, zip_code, latitude, longitude, location (auto), created_at\n\nO campo `location` é populado automaticamente via trigger a partir de latitude/longitude.",
+			"item": [
+				{
+					"name": "Listar Endereços",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/addresses?select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "addresses"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna todos os endereços cadastrados."
+					}
+				},
+				{
+					"name": "Criar Endereço",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"google_place_id\": \"ChIJN1t_tDeuEmsRUsoyG83frY4\",\n  \"formatted_address\": \"Av. Paulista, 1000 - Bela Vista, São Paulo - SP, 01310-100\",\n  \"street\": \"Avenida Paulista\",\n  \"number\": \"1000\",\n  \"complement\": \"Sala 501\",\n  \"neighborhood\": \"Bela Vista\",\n  \"city\": \"São Paulo\",\n  \"state\": \"SP\",\n  \"zip_code\": \"01310-100\",\n  \"latitude\": -23.5631990,\n  \"longitude\": -46.6543540\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/addresses",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "addresses"]
+						},
+						"description": "Cria um novo endereço. O campo `location` (PostGIS) é populado automaticamente pelo trigger."
+					}
+				}
+			]
+		},
+		{
+			"name": "09. Viagens (trips)",
+			"description": "Tabela `trips` — Solicitações de viagem/transporte.\n\nColunas: id, client_id, driver_profile_id, vehicle_id, service_category_id, pickup_address_id, dropoff_address_id, scheduled_datetime, is_round_trip, return_datetime, passenger_count, children_count, observations, driver_observations, luggage_count, status, estimated_price, final_price, is_paid, payment_method, payment_date, started_at, finished_at, cancelled_at, cancellation_reason, created_at, updated_at\n\nStatus: open, under_review, review_rejected, searching_drivers, awaiting_client_confirmation, awaiting_driver_confirmation, scheduled, started, finished, cancelled\n\nPagamento: pix, debit, credit, cash, billing",
+			"item": [
+				{
+					"name": "Minhas Viagens (Cliente)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips?client_id=eq.{{USER_ID}}&select=*,pickup_address:addresses!pickup_address_id(*),dropoff_address:addresses!dropoff_address_id(*),service_categories(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"],
+							"query": [
+								{
+									"key": "client_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,pickup_address:addresses!pickup_address_id(*),dropoff_address:addresses!dropoff_address_id(*),service_categories(*)"
+								}
+							]
+						},
+						"description": "Retorna viagens do cliente autenticado com endereços de origem/destino."
+					}
+				},
+				{
+					"name": "Minhas Viagens (Motorista)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips?driver_profile_id=eq.{{DRIVER_PROFILE_ID}}&select=*,pickup_address:addresses!pickup_address_id(*),dropoff_address:addresses!dropoff_address_id(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"],
+							"query": [
+								{
+									"key": "driver_profile_id",
+									"value": "eq.{{DRIVER_PROFILE_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,pickup_address:addresses!pickup_address_id(*),dropoff_address:addresses!dropoff_address_id(*)"
+								}
+							]
+						},
+						"description": "Retorna viagens atribuídas a um motorista específico."
+					}
+				},
+				{
+					"name": "Buscar Viagem por ID (completa)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips?id=eq.{{TRIP_ID}}&select=*,pickup_address:addresses!pickup_address_id(*),dropoff_address:addresses!dropoff_address_id(*),driver_profiles(*),vehicles(*),service_categories(*),trip_children(*),trip_luggage(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{TRIP_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,pickup_address:addresses!pickup_address_id(*),dropoff_address:addresses!dropoff_address_id(*),driver_profiles(*),vehicles(*),service_categories(*),trip_children(*),trip_luggage(*)"
+								}
+							]
+						},
+						"description": "Retorna uma viagem com todas as relações: endereços, motorista, veículo, categoria, crianças e bagagens."
+					}
+				},
+				{
+					"name": "Criar Viagem",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_id\": \"{{USER_ID}}\",\n  \"service_category_id\": \"{{SERVICE_CATEGORY_ID}}\",\n  \"pickup_address_id\": \"{{ADDRESS_ID}}\",\n  \"dropoff_address_id\": \"{{ADDRESS_ID}}\",\n  \"scheduled_datetime\": \"2026-04-15T10:00:00Z\",\n  \"is_round_trip\": false,\n  \"passenger_count\": 2,\n  \"children_count\": 0,\n  \"luggage_count\": 1,\n  \"observations\": \"Favor chegar 10 minutos antes.\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"]
+						},
+						"description": "Cria uma nova solicitação de viagem. Status inicial: open.\n\nCrie os endereços de origem e destino antes."
+					}
+				},
+				{
+					"name": "Atualizar Status da Viagem",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"scheduled\",\n  \"driver_profile_id\": \"{{DRIVER_PROFILE_ID}}\",\n  \"vehicle_id\": \"{{VEHICLE_ID}}\",\n  \"estimated_price\": 150.00\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips?id=eq.{{TRIP_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{TRIP_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza status, motorista, veículo, preço, etc. O trigger registra a mudança de status automaticamente.\n\nStatus: open → under_review → searching_drivers → awaiting_client_confirmation → awaiting_driver_confirmation → scheduled → started → finished"
+					}
+				},
+				{
+					"name": "Finalizar Viagem",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"finished\",\n  \"final_price\": 165.00,\n  \"is_paid\": true,\n  \"payment_method\": \"pix\",\n  \"payment_date\": \"2026-04-15T12:30:00Z\",\n  \"finished_at\": \"2026-04-15T12:30:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips?id=eq.{{TRIP_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{TRIP_ID}}"
+								}
+							]
+						},
+						"description": "Finaliza uma viagem com preço final, pagamento e timestamp."
+					}
+				},
+				{
+					"name": "Filtrar Viagens por Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trips?status=eq.open&select=*&order=scheduled_datetime.asc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trips"],
+							"query": [
+								{
+									"key": "status",
+									"value": "eq.open"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								},
+								{
+									"key": "order",
+									"value": "scheduled_datetime.asc"
+								}
+							]
+						},
+						"description": "Filtra viagens por status e ordena por data agendada.\n\nStatus válidos: open, under_review, review_rejected, searching_drivers, awaiting_client_confirmation, awaiting_driver_confirmation, scheduled, started, finished, cancelled"
+					}
+				}
+			]
+		},
+		{
+			"name": "10. Crianças na Viagem (trip_children)",
+			"description": "Tabela `trip_children` — Informações sobre crianças em cada viagem.\n\nColunas: id, trip_id, age, needs_car_seat, created_at",
+			"item": [
+				{
+					"name": "Crianças por Viagem",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_children?trip_id=eq.{{TRIP_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_children"],
+							"query": [
+								{
+									"key": "trip_id",
+									"value": "eq.{{TRIP_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna informações de crianças vinculadas a uma viagem."
+					}
+				},
+				{
+					"name": "Adicionar Criança",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"trip_id\": \"{{TRIP_ID}}\",\n  \"age\": 5,\n  \"needs_car_seat\": true\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_children",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_children"]
+						},
+						"description": "Registra uma criança na viagem com idade e necessidade de cadeirinha."
+					}
+				},
+				{
+					"name": "Remover Criança",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_children?id=eq.{{CHILD_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_children"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{CHILD_ID}}"
+								}
+							]
+						},
+						"description": "Remove um registro de criança de uma viagem."
+					}
+				}
+			]
+		},
+		{
+			"name": "11. Bagagens da Viagem (trip_luggage)",
+			"description": "Tabela `trip_luggage` — Bagagens de cada viagem.\n\nColunas: id, trip_id, size, quantity, created_at\n\nTamanhos: small, medium, large, extra_large",
+			"item": [
+				{
+					"name": "Bagagens por Viagem",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_luggage?trip_id=eq.{{TRIP_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_luggage"],
+							"query": [
+								{
+									"key": "trip_id",
+									"value": "eq.{{TRIP_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna as bagagens de uma viagem."
+					}
+				},
+				{
+					"name": "Adicionar Bagagem",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"trip_id\": \"{{TRIP_ID}}\",\n  \"size\": \"medium\",\n  \"quantity\": 2\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_luggage",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_luggage"]
+						},
+						"description": "Registra bagagem na viagem.\n\nTamanhos: small, medium, large, extra_large"
+					}
+				},
+				{
+					"name": "Remover Bagagem",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_luggage?id=eq.{{LUGGAGE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_luggage"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{LUGGAGE_ID}}"
+								}
+							]
+						},
+						"description": "Remove um registro de bagagem de uma viagem."
+					}
+				}
+			]
+		},
+		{
+			"name": "12. Histórico de Status de Viagem (trip_status_history)",
+			"description": "Tabela `trip_status_history` — Histórico de mudanças de status das viagens (registrado automaticamente via trigger).\n\nColunas: id, trip_id, from_status, to_status, changed_by, observations, metadata, created_at",
+			"item": [
+				{
+					"name": "Histórico por Viagem",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/trip_status_history?trip_id=eq.{{TRIP_ID}}&select=*&order=created_at.desc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "trip_status_history"],
+							"query": [
+								{
+									"key": "trip_id",
+									"value": "eq.{{TRIP_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								}
+							]
+						},
+						"description": "Retorna o histórico de mudanças de status de uma viagem, ordenado do mais recente.\n\nRegistros são criados automaticamente pelo trigger ao atualizar trips.status."
+					}
+				}
+			]
+		},
+		{
+			"name": "13. Solicitações de Serviço (service_requests)",
+			"description": "Tabela `service_requests` — Solicitações de serviços genéricos (diarista, eletricista, etc).\n\nColunas: id, client_id, provider_profile_id, service_category_id, service_date, description, status, address_id, estimated_price, final_price, is_paid, payment_method, observations, provider_observations, created_at, updated_at\n\nStatus: open, under_review, review_rejected, searching_provider, assigned, in_progress, finished, cancelled",
+			"item": [
+				{
+					"name": "Minhas Solicitações (Cliente)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_requests?client_id=eq.{{USER_ID}}&select=*,service_categories(*),addresses(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_requests"],
+							"query": [
+								{
+									"key": "client_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,service_categories(*),addresses(*)"
+								}
+							]
+						},
+						"description": "Retorna solicitações de serviço do cliente com categoria e endereço."
+					}
+				},
+				{
+					"name": "Buscar Solicitação por ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_requests?id=eq.{{SERVICE_REQUEST_ID}}&select=*,service_categories(*),addresses(*),provider_profiles(*,users(*))",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_requests"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{SERVICE_REQUEST_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,service_categories(*),addresses(*),provider_profiles(*,users(*))"
+								}
+							]
+						},
+						"description": "Retorna uma solicitação com todas as relações."
+					}
+				},
+				{
+					"name": "Criar Solicitação de Serviço",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_id\": \"{{USER_ID}}\",\n  \"service_category_id\": \"{{SERVICE_CATEGORY_ID}}\",\n  \"service_date\": \"2026-04-20T09:00:00Z\",\n  \"description\": \"Necessito de serviço de limpeza para apartamento de 3 quartos.\",\n  \"address_id\": \"{{ADDRESS_ID}}\",\n  \"observations\": \"Prédio com portaria, avisar no interfone apto 501.\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_requests",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_requests"]
+						},
+						"description": "Cria uma nova solicitação de serviço. Status inicial: open."
+					}
+				},
+				{
+					"name": "Atualizar Solicitação de Serviço",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"assigned\",\n  \"provider_profile_id\": \"{{PROVIDER_PROFILE_ID}}\",\n  \"estimated_price\": 200.00\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_requests?id=eq.{{SERVICE_REQUEST_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_requests"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{SERVICE_REQUEST_ID}}"
+								}
+							]
+						},
+						"description": "Atualiza status, prestador, preço, etc. O trigger registra a mudança de status automaticamente.\n\nStatus: open → under_review → searching_provider → assigned → in_progress → finished"
+					}
+				}
+			]
+		},
+		{
+			"name": "14. Histórico de Status de Serviço (service_request_status_history)",
+			"description": "Tabela `service_request_status_history` — Histórico de mudanças de status das solicitações de serviço.\n\nColunas: id, service_request_id, from_status, to_status, changed_by, observations, metadata, created_at",
+			"item": [
+				{
+					"name": "Histórico por Solicitação",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/service_request_status_history?service_request_id=eq.{{SERVICE_REQUEST_ID}}&select=*&order=created_at.desc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "service_request_status_history"],
+							"query": [
+								{
+									"key": "service_request_id",
+									"value": "eq.{{SERVICE_REQUEST_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								}
+							]
+						},
+						"description": "Retorna o histórico de status de uma solicitação de serviço, ordenado do mais recente.\n\nRegistros são criados automaticamente pelo trigger."
+					}
+				}
+			]
+		},
+		{
+			"name": "15. Salas de Chat (chat_rooms)",
+			"description": "Tabela `chat_rooms` — Salas de chat entre cliente e prestador.\n\nColunas: id, trip_id, service_request_id, client_id, provider_id, is_active, created_at\n\nConstraint: exatamente trip_id OU service_request_id deve ser NOT NULL (nunca ambos).",
+			"item": [
+				{
+					"name": "Minhas Salas de Chat",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_rooms?or=(client_id.eq.{{USER_ID}},provider_id.eq.{{USER_ID}})&select=*,trips(*),service_requests(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_rooms"],
+							"query": [
+								{
+									"key": "or",
+									"value": "(client_id.eq.{{USER_ID}},provider_id.eq.{{USER_ID}})"
+								},
+								{
+									"key": "select",
+									"value": "*,trips(*),service_requests(*)"
+								}
+							]
+						},
+						"description": "Retorna salas de chat onde o usuário é cliente OU prestador."
+					}
+				},
+				{
+					"name": "Sala de Chat por Viagem",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_rooms?trip_id=eq.{{TRIP_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_rooms"],
+							"query": [
+								{
+									"key": "trip_id",
+									"value": "eq.{{TRIP_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Busca a sala de chat associada a uma viagem."
+					}
+				},
+				{
+					"name": "Sala de Chat por Solicitação de Serviço",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_rooms?service_request_id=eq.{{SERVICE_REQUEST_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_rooms"],
+							"query": [
+								{
+									"key": "service_request_id",
+									"value": "eq.{{SERVICE_REQUEST_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Busca a sala de chat associada a uma solicitação de serviço."
+					}
+				},
+				{
+					"name": "Criar Sala de Chat",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"trip_id\": \"{{TRIP_ID}}\",\n  \"client_id\": \"{{USER_ID}}\",\n  \"provider_id\": \"uuid-do-prestador\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_rooms",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_rooms"]
+						},
+						"description": "Cria uma sala de chat vinculada a uma viagem ou solicitação de serviço.\n\nUse trip_id OU service_request_id (nunca ambos)."
+					}
+				}
+			]
+		},
+		{
+			"name": "16. Mensagens de Chat (chat_messages)",
+			"description": "Tabela `chat_messages` — Mensagens enviadas nas salas de chat.\n\nColunas: id, chat_room_id, sender_id, message, message_type, attachment_url, is_read, read_at, created_at\n\nTipos de mensagem: text, image, audio, file, location\n\nHabilitada para Supabase Realtime.",
+			"item": [
+				{
+					"name": "Mensagens por Sala",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_messages?chat_room_id=eq.{{CHAT_ROOM_ID}}&select=*&order=created_at.asc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_messages"],
+							"query": [
+								{
+									"key": "chat_room_id",
+									"value": "eq.{{CHAT_ROOM_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								},
+								{
+									"key": "order",
+									"value": "created_at.asc"
+								}
+							]
+						},
+						"description": "Retorna mensagens de uma sala de chat ordenadas cronologicamente."
+					}
+				},
+				{
+					"name": "Enviar Mensagem",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chat_room_id\": \"{{CHAT_ROOM_ID}}\",\n  \"sender_id\": \"{{USER_ID}}\",\n  \"message\": \"Olá! Confirmo a viagem para amanhã às 10h.\",\n  \"message_type\": \"text\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_messages",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_messages"]
+						},
+						"description": "Envia uma mensagem na sala de chat.\n\nTipos: text, image, audio, file, location\n\nPara image/audio/file, preencha attachment_url com o link do Storage."
+					}
+				},
+				{
+					"name": "Marcar Mensagem como Lida",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_read\": true,\n  \"read_at\": \"2026-04-10T15:30:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/chat_messages?id=eq.{{MESSAGE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "chat_messages"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{MESSAGE_ID}}"
+								}
+							]
+						},
+						"description": "Marca uma mensagem como lida, registrando a data/hora."
+					}
+				}
+			]
+		},
+		{
+			"name": "17. Notificações (notifications)",
+			"description": "Tabela `notifications` — Notificações do sistema para os usuários.\n\nColunas: id, user_id, title, body, type, reference_type, reference_id, link, is_read, read_at, is_pushed, pushed_at, created_at\n\nHabilitada para Supabase Realtime.",
+			"item": [
+				{
+					"name": "Minhas Notificações",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/notifications?user_id=eq.{{USER_ID}}&select=*&order=created_at.desc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "notifications"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								}
+							]
+						},
+						"description": "Retorna notificações do usuário ordenadas da mais recente."
+					}
+				},
+				{
+					"name": "Contagem de Não Lidas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Prefer",
+								"value": "count=exact"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/notifications?user_id=eq.{{USER_ID}}&is_read=eq.false&select=id",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "notifications"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "is_read",
+									"value": "eq.false"
+								},
+								{
+									"key": "select",
+									"value": "id"
+								}
+							]
+						},
+						"description": "Retorna notificações não lidas. Use o header `Prefer: count=exact` para obter a contagem no header `content-range` da resposta."
+					}
+				},
+				{
+					"name": "Marcar Notificação como Lida",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_read\": true,\n  \"read_at\": \"2026-04-10T16:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/notifications?id=eq.{{NOTIFICATION_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "notifications"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{NOTIFICATION_ID}}"
+								}
+							]
+						},
+						"description": "Marca uma notificação como lida."
+					}
+				}
+			]
+		},
+		{
+			"name": "18. Dispositivos do Usuário (user_devices)",
+			"description": "Tabela `user_devices` — Dispositivos registrados para push notifications.\n\nColunas: id, user_id, device_token, platform, is_active, last_used_at, created_at\n\nPlataformas: android, ios, web",
+			"item": [
+				{
+					"name": "Meus Dispositivos",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/user_devices?user_id=eq.{{USER_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "user_devices"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna os dispositivos registrados de um usuário."
+					}
+				},
+				{
+					"name": "Registrar Dispositivo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{USER_ID}}\",\n  \"device_token\": \"ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]\",\n  \"platform\": \"android\",\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/user_devices",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "user_devices"]
+						},
+						"description": "Registra um dispositivo para push notifications.\n\nPlataformas: android, ios, web"
+					}
+				},
+				{
+					"name": "Atualizar Dispositivo",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_active\": false\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/user_devices?id=eq.{{DEVICE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "user_devices"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{DEVICE_ID}}"
+								}
+							]
+						},
+						"description": "Ativa/desativa um dispositivo."
+					}
+				},
+				{
+					"name": "Remover Dispositivo",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/user_devices?id=eq.{{DEVICE_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "user_devices"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{DEVICE_ID}}"
+								}
+							]
+						},
+						"description": "Remove um dispositivo registrado."
+					}
+				}
+			]
+		},
+		{
+			"name": "19. Localização de Motoristas (driver_locations)",
+			"description": "Tabela `driver_locations` — Localização em tempo real dos motoristas (PostGIS).\n\nColunas: id, driver_profile_id, trip_id, latitude, longitude, location (auto), heading, speed, updated_at\n\nO campo `location` é populado automaticamente via trigger.\nHabilitada para Supabase Realtime.",
+			"item": [
+				{
+					"name": "Localização do Motorista",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/driver_locations?driver_profile_id=eq.{{DRIVER_PROFILE_ID}}&select=id,driver_profile_id,trip_id,latitude,longitude,heading,speed,updated_at",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "driver_locations"],
+							"query": [
+								{
+									"key": "driver_profile_id",
+									"value": "eq.{{DRIVER_PROFILE_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "id,driver_profile_id,trip_id,latitude,longitude,heading,speed,updated_at"
+								}
+							]
+						},
+						"description": "Retorna a localização atual de um motorista.\n\nNota: O campo `location` (geography) é omitido no select pois não é serializável diretamente."
+					}
+				},
+				{
+					"name": "Upsert Localização (Inserir ou Atualizar)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "resolution=merge-duplicates,return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver_profile_id\": \"{{DRIVER_PROFILE_ID}}\",\n  \"latitude\": -23.5505199,\n  \"longitude\": -46.6333094,\n  \"heading\": 180.50,\n  \"speed\": 45.00,\n  \"trip_id\": \"{{TRIP_ID}}\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/driver_locations?on_conflict=driver_profile_id",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "driver_locations"],
+							"query": [
+								{
+									"key": "on_conflict",
+									"value": "driver_profile_id"
+								}
+							]
+						},
+						"description": "Insere ou atualiza a localização do motorista (upsert via driver_profile_id UNIQUE).\n\nUse o header `Prefer: resolution=merge-duplicates` para upsert.\nO campo `location` e `updated_at` são atualizados automaticamente."
+					}
+				}
+			]
+		},
+		{
+			"name": "20. Comentários Privados (private_comments)",
+			"description": "Tabela `private_comments` — Comentários privados de prestadores, visíveis apenas pelo autor e administradores.\n\nColunas: id, author_id, reference_type, reference_id, comment, admin_response, responded_by, responded_at, created_at",
+			"item": [
+				{
+					"name": "Meus Comentários",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/private_comments?author_id=eq.{{USER_ID}}&select=*&order=created_at.desc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "private_comments"],
+							"query": [
+								{
+									"key": "author_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								}
+							]
+						},
+						"description": "Retorna comentários privados do usuário autenticado."
+					}
+				},
+				{
+					"name": "Todos os Comentários (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/private_comments?select=*,users!author_id(full_name,email)&order=created_at.desc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "private_comments"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*,users!author_id(full_name,email)"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								}
+							]
+						},
+						"description": "Retorna todos os comentários privados com dados do autor. Requer service role key (admin)."
+					}
+				},
+				{
+					"name": "Criar Comentário",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"author_id\": \"{{USER_ID}}\",\n  \"reference_type\": \"trip\",\n  \"reference_id\": \"{{TRIP_ID}}\",\n  \"comment\": \"Cliente solicitou parada no caminho não prevista no trajeto.\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/private_comments",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "private_comments"]
+						},
+						"description": "Cria um comentário privado vinculado a um recurso.\n\nreference_type exemplos: trip, service_request, user"
+					}
+				},
+				{
+					"name": "Responder Comentário (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"admin_response\": \"Entendido. Vamos ajustar o valor da corrida.\",\n  \"responded_by\": \"uuid-do-admin\",\n  \"responded_at\": \"2026-04-10T17:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/private_comments?id=eq.{{COMMENT_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "private_comments"],
+							"query": [
+								{
+									"key": "id",
+									"value": "eq.{{COMMENT_ID}}"
+								}
+							]
+						},
+						"description": "Admin responde a um comentário privado. Requer service role key."
+					}
+				}
+			]
+		},
+		{
+			"name": "21. Avaliações (ratings)",
+			"description": "Tabela `ratings` — Avaliações de viagens e serviços.\n\nColunas: id, trip_id, service_request_id, rater_id, rated_id, rating (1-5), comment, created_at\n\nConstraint: exatamente trip_id OU service_request_id deve ser NOT NULL.\nTrigger recalcula average_rating e total_ratings do provider_profile.",
+			"item": [
+				{
+					"name": "Avaliações de um Usuário",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/ratings?rated_id=eq.{{USER_ID}}&select=*,rater:users!rater_id(full_name,avatar_url)&order=created_at.desc",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "ratings"],
+							"query": [
+								{
+									"key": "rated_id",
+									"value": "eq.{{USER_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,rater:users!rater_id(full_name,avatar_url)"
+								},
+								{
+									"key": "order",
+									"value": "created_at.desc"
+								}
+							]
+						},
+						"description": "Retorna avaliações recebidas por um usuário (ex: prestador) com dados de quem avaliou."
+					}
+				},
+				{
+					"name": "Avaliações por Viagem",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/ratings?trip_id=eq.{{TRIP_ID}}&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "ratings"],
+							"query": [
+								{
+									"key": "trip_id",
+									"value": "eq.{{TRIP_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna avaliações vinculadas a uma viagem."
+					}
+				},
+				{
+					"name": "Criar Avaliação",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"trip_id\": \"{{TRIP_ID}}\",\n  \"rater_id\": \"{{USER_ID}}\",\n  \"rated_id\": \"uuid-do-prestador\",\n  \"rating\": 4.5,\n  \"comment\": \"Motorista muito educado e pontual. Veículo limpo.\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/ratings",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "ratings"]
+						},
+						"description": "Cria uma avaliação. O trigger recalcula automaticamente average_rating e total_ratings do prestador.\n\nrating: 1.0 a 5.0 (decimal)\nUse trip_id OU service_request_id (nunca ambos)."
+					}
+				}
+			]
+		},
+		{
+			"name": "22. Categorias do Prestador (provider_category_services)",
+			"description": "Tabela `provider_category_services` — Relação N:N entre prestadores e categorias de serviço.\n\nColunas: id, provider_profile_id, service_category_id, is_primary, created_at\n\nConstraint UNIQUE: (provider_profile_id, service_category_id)",
+			"item": [
+				{
+					"name": "Categorias do Prestador",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_category_services?provider_profile_id=eq.{{PROVIDER_PROFILE_ID}}&select=*,service_categories(*)",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_category_services"],
+							"query": [
+								{
+									"key": "provider_profile_id",
+									"value": "eq.{{PROVIDER_PROFILE_ID}}"
+								},
+								{
+									"key": "select",
+									"value": "*,service_categories(*)"
+								}
+							]
+						},
+						"description": "Retorna todas as categorias de serviço de um prestador, com detalhes da categoria."
+					}
+				},
+				{
+					"name": "Adicionar Categoria ao Prestador",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"provider_profile_id\": \"{{PROVIDER_PROFILE_ID}}\",\n  \"service_category_id\": \"{{SERVICE_CATEGORY_ID}}\",\n  \"is_primary\": false\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_category_services",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_category_services"]
+						},
+						"description": "Vincula uma categoria de serviço a um prestador.\n\nis_primary: define se é a categoria principal do prestador."
+					}
+				},
+				{
+					"name": "Remover Categoria do Prestador",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_ANON_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/provider_category_services?provider_profile_id=eq.{{PROVIDER_PROFILE_ID}}&service_category_id=eq.{{SERVICE_CATEGORY_ID}}",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "provider_category_services"],
+							"query": [
+								{
+									"key": "provider_profile_id",
+									"value": "eq.{{PROVIDER_PROFILE_ID}}"
+								},
+								{
+									"key": "service_category_id",
+									"value": "eq.{{SERVICE_CATEGORY_ID}}"
+								}
+							]
+						},
+						"description": "Remove a vinculação de uma categoria de serviço de um prestador."
+					}
+				}
+			]
+		},
+		{
+			"name": "23. Configurações do Sistema (system_settings)",
+			"description": "Tabela `system_settings` — Configurações do sistema em formato chave-valor (JSONB).\n\nColunas: id, key, value (JSONB), description, updated_by, updated_at\n\nGerenciada apenas por administradores.",
+			"item": [
+				{
+					"name": "Listar Configurações",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/system_settings?select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "system_settings"],
+							"query": [
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Retorna todas as configurações do sistema. Requer service role key (admin)."
+					}
+				},
+				{
+					"name": "Buscar Configuração por Chave",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							}
+						],
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/system_settings?key=eq.app_version&select=*",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "system_settings"],
+							"query": [
+								{
+									"key": "key",
+									"value": "eq.app_version"
+								},
+								{
+									"key": "select",
+									"value": "*"
+								}
+							]
+						},
+						"description": "Busca uma configuração pelo campo key."
+					}
+				},
+				{
+					"name": "Criar Configuração",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"key\": \"app_version\",\n  \"value\": {\"min_version\": \"1.0.0\", \"current_version\": \"1.2.0\"},\n  \"description\": \"Versão mínima e atual do aplicativo\",\n  \"updated_by\": \"uuid-do-admin\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/system_settings",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "system_settings"]
+						},
+						"description": "Cria uma nova configuração do sistema. O campo `value` é JSONB, aceita qualquer estrutura JSON."
+					}
+				},
+				{
+					"name": "Atualizar Configuração",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SUPABASE_SERVICE_ROLE_KEY}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Prefer",
+								"value": "return=representation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"value\": {\"min_version\": \"1.1.0\", \"current_version\": \"1.3.0\"},\n  \"updated_by\": \"uuid-do-admin\"\n}"
+						},
+						"url": {
+							"raw": "{{SUPABASE_URL}}/rest/v1/system_settings?key=eq.app_version",
+							"host": ["{{SUPABASE_URL}}"],
+							"path": ["rest", "v1", "system_settings"],
+							"query": [
+								{
+									"key": "key",
+									"value": "eq.app_version"
+								}
+							]
+						},
+						"description": "Atualiza o valor de uma configuração existente."
+					}
+				}
+			]
+		},
+		{
+			"name": "24. Realtime (Documentação)",
+			"description": "## Supabase Realtime — Assinaturas em Tempo Real\n\nAs seguintes tabelas estão habilitadas para Supabase Realtime via `ALTER PUBLICATION supabase_realtime ADD TABLE`.\n\n### Tabelas habilitadas:\n- `driver_locations` — Atualizações de localização dos motoristas\n- `chat_messages` — Novas mensagens de chat\n- `notifications` — Novas notificações\n\n### Como usar no frontend (JavaScript):\n\n```javascript\nimport { createClient } from '@supabase/supabase-js'\n\nconst supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)\n\n// 1. Assinar atualizações de localização de um motorista\nconst driverChannel = supabase\n  .channel('driver-location')\n  .on(\n    'postgres_changes',\n    {\n      event: 'UPDATE',\n      schema: 'public',\n      table: 'driver_locations',\n      filter: 'driver_profile_id=eq.UUID_DO_MOTORISTA'\n    },\n    (payload) => {\n      console.log('Nova localização:', payload.new)\n    }\n  )\n  .subscribe()\n\n// 2. Assinar novas mensagens em uma sala de chat\nconst chatChannel = supabase\n  .channel('chat-messages')\n  .on(\n    'postgres_changes',\n    {\n      event: 'INSERT',\n      schema: 'public',\n      table: 'chat_messages',\n      filter: 'chat_room_id=eq.UUID_DA_SALA'\n    },\n    (payload) => {\n      console.log('Nova mensagem:', payload.new)\n    }\n  )\n  .subscribe()\n\n// 3. Assinar novas notificações de um usuário\nconst notifChannel = supabase\n  .channel('notifications')\n  .on(\n    'postgres_changes',\n    {\n      event: 'INSERT',\n      schema: 'public',\n      table: 'notifications',\n      filter: 'user_id=eq.UUID_DO_USUARIO'\n    },\n    (payload) => {\n      console.log('Nova notificação:', payload.new)\n    }\n  )\n  .subscribe()\n\n// Cancelar assinatura\nawait supabase.removeChannel(driverChannel)\nawait supabase.removeChannel(chatChannel)\nawait supabase.removeChannel(notifChannel)\n```\n\n### Observações:\n- Realtime não é acessível via REST/Postman — requer WebSocket\n- Use o Supabase JS client para assinar eventos\n- Filtros seguem a mesma sintaxe PostgREST (eq, neq, gt, lt, etc)\n- RLS se aplica às assinaturas Realtime",
+			"item": []
+		}
+	]
+}
