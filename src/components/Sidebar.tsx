@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -134,11 +135,15 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-6 py-6 border-b border-border">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-background font-heading font-black text-lg">K</span>
-          </div>
+          <Image
+            src="/assets/logo.png"
+            alt="KZ Servicos"
+            width={890}
+            height={494}
+            className="h-9 w-auto object-contain"
+          />
           <span className="text-dark font-heading font-black text-xl tracking-tight">
-            KZ Serviços
+            Painel ADM
           </span>
         </Link>
       </div>
