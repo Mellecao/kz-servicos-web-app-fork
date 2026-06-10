@@ -3,8 +3,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "KZ Serviços",
-  description: "Plataforma de serviços sob demanda",
+  title: "Painel ADM",
+  description: "Painel administrativo",
 };
 
 export default function RootLayout({
