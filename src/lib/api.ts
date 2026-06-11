@@ -733,8 +733,34 @@ export async function createAddress(address: {
 export async function adminCreateTrip(trip: {
   client_id: string;
   service_category_id: string;
-  pickup_address: string;
-  dropoff_address: string;
+  pickup_address:
+    | string
+    | {
+        formatted_address: string;
+        google_place_id?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+        street?: string | null;
+        number?: string | null;
+        neighborhood?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zip_code?: string | null;
+      };
+  dropoff_address:
+    | string
+    | {
+        formatted_address: string;
+        google_place_id?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+        street?: string | null;
+        number?: string | null;
+        neighborhood?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zip_code?: string | null;
+      };
   scheduled_datetime: string;
   is_round_trip: boolean;
   return_datetime?: string | null;
@@ -823,6 +849,64 @@ export async function deleteUserById(id: string): Promise<void> {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Erro ao excluir usuário");
+}
+
+// ─── Update User ───────────────────────────────────────────
+export async function updateUserById(
+  id: string,
+  user: {
+    full_name: string;
+    email: string;
+    phone?: string | null;
+    cpf?: string | null;
+    date_of_birth?: string | null;
+    is_active?: boolean;
+  }
+): Promise<User> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(user),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao atualizar usuário");
+  return data as User;
+}
+
+// ─── Update Driver ─────────────────────────────────────────
+export async function updateDriverById(
+  id: string,
+  driver: {
+    user_id: string;
+    provider_profile_id: string;
+    vehicle_id?: string | null;
+    full_name: string;
+    email: string;
+    phone?: string | null;
+    cpf?: string | null;
+    provider_status: ProviderStatus;
+    cnh_number?: string | null;
+    cnh_category?: string | null;
+    cnh_expiration_date?: string | null;
+    is_available: boolean;
+    vehicle?: {
+      brand?: string | null;
+      model?: string | null;
+      year?: number | string | null;
+      color?: string | null;
+      license_plate?: string | null;
+      passenger_capacity?: number | string | null;
+    };
+  }
+): Promise<DriverProfile> {
+  const res = await fetch(`/api/drivers/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(driver),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao atualizar motorista");
+  return data as DriverProfile;
 }
 
 // ─── Create Provider Profile ───────────────────────────────

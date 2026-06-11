@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import { useToast } from "@/components/Toast";
 import {
@@ -9,13 +9,15 @@ import {
   createDriverProfile,
   createVehicle,
   fetchServiceCategories,
+  updateDriverById,
 } from "@/lib/api";
-import type { ServiceCategory } from "@/types/database";
+import type { DriverProfile, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
 
 interface NovoMotoristaFormProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  driver?: (DriverProfile & { vehicle?: Vehicle }) | null;
 }
 
 const inputClass =
@@ -26,15 +28,23 @@ const labelClass = "block text-sm font-body text-contrast mb-1";
 const sectionClass = "text-sm font-heading font-bold text-dark mb-3 mt-2";
 
 const cnhCategories = ["A", "B", "C", "D", "E"];
+const providerStatuses: Array<{ value: ProviderStatus; label: string }> = [
+  { value: "approved", label: "Aprovado" },
+  { value: "pending", label: "Pendente" },
+  { value: "rejected", label: "Rejeitado" },
+  { value: "suspended", label: "Suspenso" },
+];
 
 export default function NovoMotoristaForm({
   open,
   onClose,
   onSuccess,
+  driver = null,
 }: NovoMotoristaFormProps) {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const isEditing = Boolean(driver);
 
   // Dados do motorista
   const [fullName, setFullName] = useState("");
@@ -42,6 +52,8 @@ export default function NovoMotoristaForm({
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [cpf, setCpf] = useState("");
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus>("approved");
+  const [isAvailable, setIsAvailable] = useState(true);
 
   // CNH
   const [cnhNumber, setCnhNumber] = useState("");
@@ -56,12 +68,43 @@ export default function NovoMotoristaForm({
   const [licensePlate, setLicensePlate] = useState("");
   const [passengerCapacity, setPassengerCapacity] = useState("");
 
+  useEffect(() => {
+    if (!open) return;
+    if (!driver) {
+      resetForm();
+      return;
+    }
+
+    const user = driver.provider_profiles?.users;
+    const vehicle = driver.vehicle;
+
+    setFullName(user?.full_name ?? "");
+    setEmail(user?.email ?? "");
+    setPassword("");
+    setPhone(user?.phone ?? "");
+    setCpf(user?.cpf ?? "");
+    setProviderStatus(driver.provider_profiles?.status ?? "approved");
+    setIsAvailable(driver.is_available);
+    setCnhNumber(driver.cnh_number ?? "");
+    setCnhCategory(driver.cnh_category ?? "");
+    setCnhExpiration(driver.cnh_expiration_date ?? "");
+    setBrand(vehicle?.brand ?? "");
+    setModel(vehicle?.model ?? "");
+    setYear(vehicle?.year ? String(vehicle.year) : "");
+    setColor(vehicle?.color ?? "");
+    setLicensePlate(vehicle?.license_plate ?? "");
+    setPassengerCapacity(vehicle?.passenger_capacity ? String(vehicle.passenger_capacity) : "");
+    setEmailError("");
+  }, [open, driver]);
+
   function resetForm() {
     setFullName("");
     setEmail("");
     setPassword("");
     setPhone("");
     setCpf("");
+    setProviderStatus("approved");
+    setIsAvailable(true);
     setCnhNumber("");
     setCnhCategory("");
     setCnhExpiration("");
@@ -76,12 +119,12 @@ export default function NovoMotoristaForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || (!isEditing && !password)) {
       toast("warning", "Preencha todos os campos obrigatórios");
       return;
     }
 
-    if (password.length < 6) {
+    if (!isEditing && password.length < 6) {
       toast("warning", "A senha deve ter pelo menos 6 caracteres");
       return;
     }
@@ -114,54 +157,86 @@ export default function NovoMotoristaForm({
     setSubmitting(true);
     setEmailError("");
     try {
-      // 1. Create user
-      const user = await createUser({
-        full_name: fullName,
-        email,
-        password,
-        phone: phone || null,
-        cpf: cpf || null,
-        role: "provider",
-      });
+      if (driver) {
+        const userId = driver.provider_profiles?.users?.id;
+        const providerProfileId = driver.provider_profile_id;
+        if (!userId || !providerProfileId) {
+          toast("danger", "Não foi possível localizar o cadastro do motorista.");
+          return;
+        }
 
-      // 2. Find trip service category
-      const categories: ServiceCategory[] = await fetchServiceCategories();
-      const tripCategory = categories.find((c) => c.service_type === "trip");
-      if (!tripCategory) {
-        toast("danger", "Categoria de viagem não encontrada.");
-        return;
-      }
-
-      // 3. Create provider profile
-      const profile = await createProviderProfile({
-        user_id: user.id,
-        service_category_id: tripCategory.id,
-        status: "approved",
-      });
-
-      // 4. Create driver profile
-      const driverProfile = await createDriverProfile({
-        provider_profile_id: profile.id,
-        cnh_number: cnhNumber || null,
-        cnh_category: cnhCategory || null,
-        cnh_expiration_date: cnhExpiration || null,
-        is_available: true,
-      });
-
-      // 5. Create vehicle if any field is filled
-      if (hasVehicle) {
-        await createVehicle({
-          driver_profile_id: driverProfile.id,
-          brand,
-          model,
-          year: vehicleYear,
-          color,
-          license_plate: licensePlate,
-          passenger_capacity: Number(passengerCapacity) || 4,
+        await updateDriverById(driver.id, {
+          user_id: userId,
+          provider_profile_id: providerProfileId,
+          vehicle_id: driver.vehicle?.id ?? null,
+          full_name: fullName,
+          email,
+          phone: phone || null,
+          cpf: cpf || null,
+          provider_status: providerStatus,
+          cnh_number: cnhNumber || null,
+          cnh_category: cnhCategory || null,
+          cnh_expiration_date: cnhExpiration || null,
+          is_available: isAvailable,
+          vehicle: {
+            brand: brand || null,
+            model: model || null,
+            year: year || null,
+            color: color || null,
+            license_plate: licensePlate || null,
+            passenger_capacity: passengerCapacity || null,
+          },
         });
+      } else {
+        // 1. Create user
+        const user = await createUser({
+          full_name: fullName,
+          email,
+          password,
+          phone: phone || null,
+          cpf: cpf || null,
+          role: "provider",
+        });
+
+        // 2. Find trip service category
+        const categories: ServiceCategory[] = await fetchServiceCategories();
+        const tripCategory = categories.find((c) => c.service_type === "trip");
+        if (!tripCategory) {
+          toast("danger", "Categoria de viagem não encontrada.");
+          return;
+        }
+
+        // 3. Create provider profile
+        const profile = await createProviderProfile({
+          user_id: user.id,
+          service_category_id: tripCategory.id,
+          status: "approved",
+        });
+
+        // 4. Create driver profile
+        const driverProfile = await createDriverProfile({
+          provider_profile_id: profile.id,
+          cnh_number: cnhNumber || null,
+          cnh_category: cnhCategory || null,
+          cnh_expiration_date: cnhExpiration || null,
+          is_available: true,
+        });
+
+        // 5. Create vehicle if any field is filled
+        if (hasVehicle) {
+          await createVehicle({
+            driver_profile_id: driverProfile.id,
+            brand,
+            model,
+            year: vehicleYear,
+            color,
+            license_plate: licensePlate,
+            passenger_capacity: Number(passengerCapacity) || 4,
+          });
+        }
       }
 
-      toast("success", "Motorista criado com sucesso!");
+      toast("success", driver ? "Motorista atualizado com sucesso!" : "Motorista criado com sucesso!");
       resetForm();
       onSuccess();
       onClose();
@@ -172,7 +247,7 @@ export default function NovoMotoristaForm({
         setEmailError(errorMsg);
         toast("danger", errorMsg);
       } else {
-        toast("danger", "Erro ao criar motorista. Tente novamente.");
+        toast("danger", message || (driver ? "Erro ao atualizar motorista. Tente novamente." : "Erro ao criar motorista. Tente novamente."));
       }
     } finally {
       setSubmitting(false);
@@ -183,7 +258,7 @@ export default function NovoMotoristaForm({
     <SlidePanel
       open={open}
       onClose={onClose}
-      title="Novo Motorista"
+      title={isEditing ? "Editar Motorista" : "Novo Motorista"}
       footer={
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
           <button
@@ -199,7 +274,9 @@ export default function NovoMotoristaForm({
             disabled={submitting}
             className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "Criando..." : "Criar Motorista"}
+            {submitting
+              ? isEditing ? "Salvando..." : "Criando..."
+              : isEditing ? "Salvar Motorista" : "Criar Motorista"}
           </button>
         </div>
       }
@@ -248,16 +325,17 @@ export default function NovoMotoristaForm({
 
         <div>
           <label htmlFor="driver-password" className={labelClass}>
-            Senha de acesso *
+            Senha de acesso {!isEditing && "*"}
           </label>
           <input
             id="driver-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mínimo 6 caracteres"
+            placeholder={isEditing ? "Não alterada na edição" : "Mínimo 6 caracteres"}
             className={inputClass}
             autoComplete="new-password"
+            disabled={isEditing}
           />
         </div>
 
@@ -274,6 +352,38 @@ export default function NovoMotoristaForm({
             className={inputClass}
           />
         </div>
+
+        {isEditing && (
+          <>
+            <div>
+              <label htmlFor="driver-status" className={labelClass}>
+                Status do cadastro
+              </label>
+              <select
+                id="driver-status"
+                value={providerStatus}
+                onChange={(e) => setProviderStatus(e.target.value as ProviderStatus)}
+                className={inputClass}
+              >
+                {providerStatuses.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-body text-dark">
+              <input
+                type="checkbox"
+                checked={isAvailable}
+                onChange={(e) => setIsAvailable(e.target.checked)}
+                className="rounded border-border bg-background text-primary focus:ring-primary cursor-pointer"
+              />
+              Motorista disponível
+            </label>
+          </>
+        )}
 
         <div>
           <label htmlFor="driver-cpf" className={labelClass}>

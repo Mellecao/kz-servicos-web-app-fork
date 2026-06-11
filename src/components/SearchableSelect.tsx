@@ -81,10 +81,12 @@ export default function SearchableSelect({
     // Restore display text to selected option
     if (selectedOption) {
       setSearch(selectedOption.label);
+    } else if (value) {
+      setSearch(value);
     } else {
       setSearch("");
     }
-  }, [selectedOption]);
+  }, [selectedOption, value]);
 
   // Close on outside click
   useEffect(() => {
@@ -104,11 +106,17 @@ export default function SearchableSelect({
 
   // Sync search text when value changes externally
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect --
+       Existing controlled input behavior keeps typed display text aligned when
+       the parent resets or selects a value outside this component. */
     if (selectedOption) {
       setSearch(selectedOption.label);
+    } else if (value) {
+      setSearch(value);
     } else if (!value) {
       setSearch("");
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [value, selectedOption]);
 
   // Scroll highlighted item into view

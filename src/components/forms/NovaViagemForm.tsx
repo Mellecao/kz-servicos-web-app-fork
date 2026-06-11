@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import SearchableSelect from "@/components/SearchableSelect";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
@@ -10,7 +10,11 @@ import {
   fetchUsers,
   fetchServiceCategories,
 } from "@/lib/api";
-import { useGooglePlacesAutocomplete } from "@/lib/google-places";
+import {
+  fetchGooglePlaceDetails,
+  type GooglePlaceAddress,
+  useGooglePlacesAutocomplete,
+} from "@/lib/google-places";
 import type { User, ServiceCategory, PaymentMethod } from "@/types/database";
 import type { SearchableSelectOption } from "@/components/SearchableSelect";
 
@@ -53,7 +57,11 @@ export default function NovaViagemForm({
 
   const [clientId, setClientId] = useState("");
   const [pickupAddress, setPickupAddress] = useState("");
+  const [pickupPlaceAddress, setPickupPlaceAddress] =
+    useState<GooglePlaceAddress | null>(null);
   const [dropoffAddress, setDropoffAddress] = useState("");
+  const [dropoffPlaceAddress, setDropoffPlaceAddress] =
+    useState<GooglePlaceAddress | null>(null);
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [returnDatetime, setReturnDatetime] = useState("");
@@ -65,6 +73,8 @@ export default function NovaViagemForm({
 
   const pickupPlaces = useGooglePlacesAutocomplete();
   const dropoffPlaces = useGooglePlacesAutocomplete();
+  const pickupDetailsSeqRef = useRef(0);
+  const dropoffDetailsSeqRef = useRef(0);
 
   const loadClients = () => {
     fetchUsers()
@@ -87,7 +97,9 @@ export default function NovaViagemForm({
   function resetForm() {
     setClientId("");
     setPickupAddress("");
+    setPickupPlaceAddress(null);
     setDropoffAddress("");
+    setDropoffPlaceAddress(null);
     setScheduledDatetime("");
     setIsRoundTrip(false);
     setReturnDatetime("");
@@ -133,8 +145,10 @@ export default function NovaViagemForm({
       await adminCreateTrip({
         client_id: clientId,
         service_category_id: tripCategoryId,
-        pickup_address: pickupAddress,
-        dropoff_address: dropoffAddress,
+        pickup_address:
+          pickupPlaceAddress ?? { formatted_address: pickupAddress },
+        dropoff_address:
+          dropoffPlaceAddress ?? { formatted_address: dropoffAddress },
         scheduled_datetime: new Date(scheduledDatetime).toISOString(),
         is_round_trip: isRoundTrip,
         return_datetime: isRoundTrip
@@ -211,12 +225,24 @@ export default function NovaViagemForm({
             <SearchableSelect
               options={pickupPlaces.options}
               value={pickupAddress}
-              onChange={(_placeId, label) => {
+              onChange={(placeId, label) => {
                 setPickupAddress(label);
+                const requestSeq = ++pickupDetailsSeqRef.current;
+                setPickupPlaceAddress({
+                  formatted_address: label,
+                  google_place_id: placeId,
+                });
                 pickupPlaces.clear();
+                fetchGooglePlaceDetails(placeId, label).then((address) => {
+                  if (requestSeq !== pickupDetailsSeqRef.current) return;
+                  setPickupAddress(address.formatted_address);
+                  setPickupPlaceAddress(address);
+                });
               }}
               onSearchChange={(q) => {
+                pickupDetailsSeqRef.current++;
                 setPickupAddress(q);
+                setPickupPlaceAddress(null);
                 pickupPlaces.search(q);
               }}
               placeholder="Ex: Rua das Flores, 123 - Centro"
@@ -231,12 +257,24 @@ export default function NovaViagemForm({
             <SearchableSelect
               options={dropoffPlaces.options}
               value={dropoffAddress}
-              onChange={(_placeId, label) => {
+              onChange={(placeId, label) => {
                 setDropoffAddress(label);
+                const requestSeq = ++dropoffDetailsSeqRef.current;
+                setDropoffPlaceAddress({
+                  formatted_address: label,
+                  google_place_id: placeId,
+                });
                 dropoffPlaces.clear();
+                fetchGooglePlaceDetails(placeId, label).then((address) => {
+                  if (requestSeq !== dropoffDetailsSeqRef.current) return;
+                  setDropoffAddress(address.formatted_address);
+                  setDropoffPlaceAddress(address);
+                });
               }}
               onSearchChange={(q) => {
+                dropoffDetailsSeqRef.current++;
                 setDropoffAddress(q);
+                setDropoffPlaceAddress(null);
                 dropoffPlaces.search(q);
               }}
               placeholder="Ex: Aeroporto Internacional"

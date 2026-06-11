@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import Modal from "@/components/Modal";
 import { useToast } from "@/components/Toast";
-import { createUser } from "@/lib/api";
+import { createUser, updateUserById } from "@/lib/api";
+import type { User } from "@/types/database";
 
 interface NovoClienteFormProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   variant?: "slide" | "modal";
+  client?: User | null;
 }
 
 const inputClass =
@@ -24,6 +26,7 @@ export default function NovoClienteForm({
   onClose,
   onSuccess,
   variant = "slide",
+  client = null,
 }: NovoClienteFormProps) {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +39,27 @@ export default function NovoClienteForm({
   const [phone, setPhone] = useState("");
   const [cpf, setCpf] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
+  const [isActive, setIsActive] = useState(true);
+
+  const isEditing = Boolean(client);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!client) {
+      resetForm();
+      return;
+    }
+
+    setFullName(client.full_name ?? "");
+    setEmail(client.email ?? "");
+    setPassword("");
+    setPhone(client.phone ?? "");
+    setCpf(client.cpf ?? "");
+    setDateOfBirth(client.date_of_birth ?? "");
+    setIsActive(client.is_active);
+    setCpfError("");
+    setEmailError("");
+  }, [open, client]);
 
   function resetForm() {
     setFullName("");
@@ -44,18 +68,19 @@ export default function NovoClienteForm({
     setPhone("");
     setCpf("");
     setDateOfBirth("");
+    setIsActive(true);
     setCpfError("");
     setEmailError("");
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || (!isEditing && !password)) {
       toast("warning", "Preencha todos os campos obrigatórios");
       return;
     }
 
-    if (password.length < 6) {
+    if (!isEditing && password.length < 6) {
       toast("warning", "A senha deve ter pelo menos 6 caracteres");
       return;
     }
@@ -64,17 +89,28 @@ export default function NovoClienteForm({
     setEmailError("");
     setSubmitting(true);
     try {
-      await createUser({
-        full_name: fullName,
-        email,
-        password,
-        phone: phone || null,
-        cpf: cpf || null,
-        role: "client",
-        date_of_birth: dateOfBirth || null,
-      });
+      if (client) {
+        await updateUserById(client.id, {
+          full_name: fullName,
+          email,
+          phone: phone || null,
+          cpf: cpf || null,
+          date_of_birth: dateOfBirth || null,
+          is_active: isActive,
+        });
+      } else {
+        await createUser({
+          full_name: fullName,
+          email,
+          password,
+          phone: phone || null,
+          cpf: cpf || null,
+          role: "client",
+          date_of_birth: dateOfBirth || null,
+        });
+      }
 
-      toast("success", "Cliente criado com sucesso!");
+      toast("success", client ? "Cliente atualizado com sucesso!" : "Cliente criado com sucesso!");
       resetForm();
       onSuccess();
       onClose();
@@ -89,7 +125,7 @@ export default function NovoClienteForm({
         setEmailError(errorMsg);
         toast("danger", errorMsg);
       } else {
-        toast("danger", "Erro ao criar cliente. Tente novamente.");
+        toast("danger", client ? "Erro ao atualizar cliente. Tente novamente." : "Erro ao criar cliente. Tente novamente.");
       }
     } finally {
       setSubmitting(false);
@@ -111,7 +147,9 @@ export default function NovoClienteForm({
         disabled={submitting}
         className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {submitting ? "Criando..." : "Criar Cliente"}
+        {submitting
+          ? isEditing ? "Salvando..." : "Criando..."
+          : isEditing ? "Salvar Cliente" : "Criar Cliente"}
       </button>
     </div>
   );
@@ -158,16 +196,17 @@ export default function NovoClienteForm({
 
       <div>
         <label htmlFor="client-password" className={labelClass}>
-          Senha *
+          Senha {!isEditing && "*"}
         </label>
         <input
           id="client-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Mínimo 6 caracteres"
+          placeholder={isEditing ? "Não alterada na edição" : "Mínimo 6 caracteres"}
           className={inputClass}
           autoComplete="new-password"
+          disabled={isEditing}
         />
       </div>
 
@@ -217,19 +256,31 @@ export default function NovoClienteForm({
           className={inputClass}
         />
       </div>
+
+      {isEditing && (
+        <label className="flex items-center gap-2 text-sm font-body text-dark">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="rounded border-border bg-background text-primary focus:ring-primary cursor-pointer"
+          />
+          Cliente ativo
+        </label>
+      )}
     </form>
   );
 
   if (variant === "modal") {
     return (
-      <Modal open={open} onClose={onClose} title="Novo Cliente" footer={footer}>
+      <Modal open={open} onClose={onClose} title={isEditing ? "Editar Cliente" : "Novo Cliente"} footer={footer}>
         {formContent}
       </Modal>
     );
   }
 
   return (
-    <SlidePanel open={open} onClose={onClose} title="Novo Cliente" footer={footer}>
+    <SlidePanel open={open} onClose={onClose} title={isEditing ? "Editar Cliente" : "Novo Cliente"} footer={footer}>
       {formContent}
     </SlidePanel>
   );
