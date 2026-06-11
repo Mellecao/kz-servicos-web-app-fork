@@ -47,6 +47,7 @@ export default function MotoristasPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<DriverWithVehicle | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
   );
@@ -123,7 +124,10 @@ export default function MotoristasPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setEditingDriver(null);
+            setShowForm(true);
+          }}
           className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
         >
           + Novo Motorista
@@ -237,6 +241,30 @@ export default function MotoristasPage() {
                 >
                   {statusLabels[status]}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingDriver(driver);
+                    setShowForm(true);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-dark hover:bg-surface-hover transition-colors"
+                  aria-label={`Editar ${name}`}
+                  title="Editar motorista"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m16.862 4.487 1.651-1.651a1.875 1.875 0 1 1 2.651 2.651L8.625 18.026 4.5 19.5l1.474-4.125L16.862 4.487Z"
+                    />
+                  </svg>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleDeleteDriver(driver)}
@@ -354,6 +382,29 @@ export default function MotoristasPage() {
                       <td className="px-5 py-3.5 text-right">
                         <button
                           type="button"
+                          onClick={() => {
+                            setEditingDriver(driver);
+                            setShowForm(true);
+                          }}
+                          className="mr-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-dark hover:bg-surface-hover transition-colors"
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="m16.862 4.487 1.651-1.651a1.875 1.875 0 1 1 2.651 2.651L8.625 18.026 4.5 19.5l1.474-4.125L16.862 4.487Z"
+                            />
+                          </svg>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleDeleteDriver(driver)}
                           disabled={!userId || deletingUserId === userId}
                           className="inline-flex items-center gap-2 rounded-lg border border-danger/30 px-3 py-2 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -385,7 +436,11 @@ export default function MotoristasPage() {
 
       <NovoMotoristaForm
         open={showForm}
-        onClose={() => setShowForm(false)}
+        driver={editingDriver}
+        onClose={() => {
+          setShowForm(false);
+          setEditingDriver(null);
+        }}
         onSuccess={loadDrivers}
       />
     </div>

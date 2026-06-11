@@ -27,6 +27,7 @@ export default function ClientesPage() {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editingClient, setEditingClient] = useState<User | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
   );
@@ -85,7 +86,10 @@ export default function ClientesPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setEditingClient(null);
+            setShowForm(true);
+          }}
           className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
         >
           + Novo Cliente
@@ -172,6 +176,30 @@ export default function ClientesPage() {
                 </p>
                 <p className="text-muted text-xs truncate">{client.email}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingClient(client);
+                  setShowForm(true);
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-dark hover:bg-surface-hover transition-colors"
+                aria-label={`Editar ${client.full_name || client.email}`}
+                title="Editar cliente"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m16.862 4.487 1.651-1.651a1.875 1.875 0 1 1 2.651 2.651L8.625 18.026 4.5 19.5l1.474-4.125L16.862 4.487Z"
+                  />
+                </svg>
+              </button>
               <button
                 type="button"
                 onClick={() => handleDeleteClient(client)}
@@ -273,6 +301,29 @@ export default function ClientesPage() {
                     <td className="px-5 py-3.5 text-right">
                       <button
                         type="button"
+                        onClick={() => {
+                          setEditingClient(client);
+                          setShowForm(true);
+                        }}
+                        className="mr-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-dark hover:bg-surface-hover transition-colors"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m16.862 4.487 1.651-1.651a1.875 1.875 0 1 1 2.651 2.651L8.625 18.026 4.5 19.5l1.474-4.125L16.862 4.487Z"
+                          />
+                        </svg>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleDeleteClient(client)}
                         disabled={deletingUserId === client.id}
                         className="inline-flex items-center gap-2 rounded-lg border border-danger/30 px-3 py-2 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -303,7 +354,11 @@ export default function ClientesPage() {
 
       <NovoClienteForm
         open={showForm}
-        onClose={() => setShowForm(false)}
+        client={editingClient}
+        onClose={() => {
+          setShowForm(false);
+          setEditingClient(null);
+        }}
         onSuccess={loadClients}
       />
     </div>
