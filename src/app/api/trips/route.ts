@@ -88,6 +88,61 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const admin = getSupabaseAdmin();
+    const authHeader = request.headers.get("authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+    if (!token) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    if (authError || !authData.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const { data: userData, error: userError } = await admin
+      .from("users")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+    if (userError || userData?.role !== "admin") {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
+
+    const tripId = request.nextUrl.searchParams.get("id")?.trim();
+    if (!tripId) {
+      return NextResponse.json({ error: "ID da viagem é obrigatório" }, { status: 400 });
+    }
+
+    const { data: trip, error: tripError } = await admin
+      .from("trips")
+      .select("status")
+      .eq("id", tripId)
+      .single();
+    if (tripError) {
+      return NextResponse.json({ error: tripError.message }, { status: 400 });
+    }
+    if (trip?.status !== "cancelled") {
+      return NextResponse.json(
+        { error: "Somente viagens canceladas podem ser excluídas" },
+        { status: 409 }
+      );
+    }
+
+    const { error } = await admin.from("trips").delete().eq("id", tripId);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+  }
+}
+
 function normalizeAddressInput(input: AddressInput | undefined) {
   if (typeof input === "string") {
     const formattedAddress = input.trim();

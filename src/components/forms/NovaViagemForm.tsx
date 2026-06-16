@@ -68,6 +68,8 @@ export default function NovaViagemForm({
   const [passengerCount, setPassengerCount] = useState(1);
   const [childrenCount, setChildrenCount] = useState(0);
   const [luggageCount, setLuggageCount] = useState(0);
+  const [childrenObservations, setChildrenObservations] = useState("");
+  const [luggageObservations, setLuggageObservations] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [observations, setObservations] = useState("");
 
@@ -106,6 +108,8 @@ export default function NovaViagemForm({
     setPassengerCount(1);
     setChildrenCount(0);
     setLuggageCount(0);
+    setChildrenObservations("");
+    setLuggageObservations("");
     setPaymentMethod("");
     setObservations("");
     setSubmitted(false);
@@ -142,6 +146,19 @@ export default function NovaViagemForm({
 
     setSubmitting(true);
     try {
+      const combinedObservations =
+        [
+          observations.trim(),
+          childrenCount > 0 && childrenObservations.trim()
+            ? `Crianças: ${childrenObservations.trim()}`
+            : "",
+          luggageCount > 0 && luggageObservations.trim()
+            ? `Malas: ${luggageObservations.trim()}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n") || null;
+
       await adminCreateTrip({
         client_id: clientId,
         service_category_id: tripCategoryId,
@@ -157,7 +174,7 @@ export default function NovaViagemForm({
         passenger_count: passengerCount,
         children_count: childrenCount,
         luggage_count: luggageCount,
-        observations: observations || null,
+        observations: combinedObservations,
         payment_method: paymentMethod || null,
       });
 
@@ -355,7 +372,11 @@ export default function NovaViagemForm({
                 type="number"
                 min={0}
                 value={childrenCount}
-                onChange={(e) => setChildrenCount(Number(e.target.value))}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setChildrenCount(next);
+                  if (next <= 0) setChildrenObservations("");
+                }}
                 className={inputClass}
               />
             </div>
@@ -368,11 +389,47 @@ export default function NovaViagemForm({
                 type="number"
                 min={0}
                 value={luggageCount}
-                onChange={(e) => setLuggageCount(Number(e.target.value))}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setLuggageCount(next);
+                  if (next <= 0) setLuggageObservations("");
+                }}
                 className={inputClass}
               />
             </div>
           </div>
+
+          {childrenCount > 0 && (
+            <div>
+              <label htmlFor="children-observations" className={labelClass}>
+                Observação sobre crianças
+              </label>
+              <textarea
+                id="children-observations"
+                value={childrenObservations}
+                onChange={(e) => setChildrenObservations(e.target.value)}
+                rows={2}
+                placeholder="Ex: 2 crianças, uma de 9 anos e outra de 12"
+                className={inputClass + " resize-none"}
+              />
+            </div>
+          )}
+
+          {luggageCount > 0 && (
+            <div>
+              <label htmlFor="luggage-observations" className={labelClass}>
+                Observação sobre malas
+              </label>
+              <textarea
+                id="luggage-observations"
+                value={luggageObservations}
+                onChange={(e) => setLuggageObservations(e.target.value)}
+                rows={2}
+                placeholder="Ex: duas malas grandes e uma pequena"
+                className={inputClass + " resize-none"}
+              />
+            </div>
+          )}
 
           {/* Forma de pagamento */}
           <div>

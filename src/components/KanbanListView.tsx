@@ -8,6 +8,11 @@ import { type KanbanCard, type KanbanColumn } from "@/components/KanbanBoard";
 export interface KanbanListColumn extends KanbanColumn {
   nextColumnId?: string;
   actionLabel?: string;
+  actions?: {
+    label: string;
+    to: string;
+    direction?: "forward" | "back";
+  }[];
 }
 
 interface KanbanListViewProps {
@@ -19,13 +24,11 @@ interface KanbanListViewProps {
 // ─── Tab Button ────────────────────────────────────────────
 
 function TabButton({
-  id,
   label,
   selected,
   color,
   onClick,
 }: {
-  id: string;
   label: string;
   selected: boolean;
   color?: string;
@@ -103,13 +106,26 @@ function CardItem({
       )}
 
       {/* Action buttons */}
-      <div className="mt-3">
+      <div className="mt-3 flex flex-col gap-2">
         <button
           onClick={() => onCardClick?.(card)}
           className="w-full text-xs py-2 rounded-lg bg-surface border border-border text-dark font-medium hover:bg-background transition-colors"
         >
           Ver detalhes
         </button>
+        {column.actions?.map((action) => (
+          <button
+            key={`${card.id}-${action.to}`}
+            onClick={() => onMoveCard(card.id, column.id, action.to)}
+            className={`w-full text-xs py-2 rounded-lg border font-heading font-bold transition-colors ${
+              action.direction === "back"
+                ? "border-border text-contrast hover:text-dark hover:bg-background"
+                : "border-primary bg-primary text-background hover:bg-primary-dark"
+            }`}
+          >
+            {action.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -140,7 +156,6 @@ export default function KanbanListView({
       {/* Status filter tabs */}
       <div className="flex overflow-x-auto gap-0 border-b border-border mb-4">
         <TabButton
-          id="all"
           label="Todas"
           selected={selectedStatus === "all"}
           onClick={() => setSelectedStatus("all")}
@@ -148,7 +163,6 @@ export default function KanbanListView({
         {columns.map((col) => (
           <TabButton
             key={col.id}
-            id={col.id}
             label={col.title}
             selected={selectedStatus === col.id}
             color={col.color}

@@ -45,10 +45,15 @@ export function useGooglePlacesAutocomplete() {
     setLoading(true);
 
     debounceRef.current = setTimeout(async () => {
-      const results = await fetchGooglePlacePredictions(query);
-      if (requestSeq !== requestSeqRef.current) return;
-      setOptions(results);
-      setLoading(false);
+      try {
+        const results = await fetchGooglePlacePredictions(query);
+        if (requestSeq !== requestSeqRef.current) return;
+        setOptions(results);
+      } finally {
+        if (requestSeq === requestSeqRef.current) {
+          setLoading(false);
+        }
+      }
     }, 300);
   }, []);
 

@@ -160,6 +160,19 @@ export async function updateTripStatus(id: string, status: TripStatus): Promise<
   logAdminAction("Status atualizado", id, { status });
 }
 
+export async function deleteTrip(id: string): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`/api/trips?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: data.session?.access_token
+      ? { Authorization: `Bearer ${data.session.access_token}` }
+      : undefined,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || "Erro ao excluir viagem");
+  logAdminAction("Viagem excluída", id, {});
+}
+
 // ─── Fetch Single Trip ─────────────────────────────────────
 export async function fetchTripById(id: string): Promise<Trip> {
   const { data, error } = await supabase
@@ -279,6 +292,26 @@ export async function updateTripDriverCandidateStatus(
     .single();
   if (error) throw error;
   logAdminAction("Status do candidato atualizado", tripId, { driver_profile_id: driverProfileId, status });
+  return data as TripDriverCandidate;
+}
+
+export async function updateTripDriverCandidatePrice(
+  tripId: string,
+  driverProfileId: string,
+  offeredPrice: number | null
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({ offered_price: offeredPrice })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato atualizado", tripId, {
+    driver_profile_id: driverProfileId,
+    offered_price: offeredPrice,
+  });
   return data as TripDriverCandidate;
 }
 

@@ -7,6 +7,7 @@ import {
   useCallback,
   type KeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 
 export interface SearchableSelectOption {
   value: string;
@@ -65,6 +66,7 @@ export default function SearchableSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   // Find current label for display
   const selectedOption = options.find((o) => o.value === value);
@@ -88,12 +90,26 @@ export default function SearchableSelect({
     }
   }, [selectedOption, value]);
 
+  const updateDropdownPosition = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 500,
+    });
+  }, []);
+
   // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (
         containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
+        !containerRef.current.contains(e.target as Node) &&
+        !listRef.current?.contains(e.target as Node)
       ) {
         close();
       }
@@ -103,6 +119,17 @@ export default function SearchableSelect({
     }
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isOpen, close]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [isOpen, filtered.length, loading, updateDropdownPosition]);
 
   // Sync search text when value changes externally
   useEffect(() => {
@@ -131,6 +158,7 @@ export default function SearchableSelect({
     setSearch(text);
     setHighlightedIndex(-1);
     if (!isOpen) setIsOpen(true);
+    updateDropdownPosition();
     onSearchChange?.(text);
   }
 
@@ -216,6 +244,7 @@ export default function SearchableSelect({
             } else {
               setIsOpen(true);
               inputRef.current?.focus();
+              updateDropdownPosition();
             }
           }}
           className="px-2 text-contrast hover:text-dark cursor-pointer shrink-0"
@@ -238,12 +267,13 @@ export default function SearchableSelect({
       </div>
 
       {/* Dropdown */}
-      {isOpen && (
+      {isOpen && typeof document !== "undefined" && createPortal(
         <ul
           ref={listRef}
           id="searchable-select-list"
           role="listbox"
-          className="absolute z-[300] mt-1 w-full max-h-60 overflow-y-auto rounded-lg bg-surface border border-border shadow-lg"
+          style={dropdownStyle}
+          className="max-h-60 overflow-y-auto rounded-lg bg-surface border border-border shadow-lg"
         >
           {loading && (
             <li className="px-3 py-2 text-sm text-contrast">
@@ -299,7 +329,7 @@ export default function SearchableSelect({
             </li>
           )}
         </ul>
-      )}
+      , document.body)}
     </div>
   );
 }

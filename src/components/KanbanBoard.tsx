@@ -29,26 +29,38 @@ export interface KanbanColumn {
   title: string;
   color: string;
   cards: KanbanCard[];
+  actions?: {
+    label: string;
+    to: string;
+    direction?: "forward" | "back";
+  }[];
 }
 
 interface KanbanBoardProps {
   columns: KanbanColumn[];
   onCardMove?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
   onCardClick?: (cardId: string) => void;
+  canMoveCard?: (fromColumnId: string, toColumnId: string) => boolean;
 }
 
 // ─── Draggable Card ────────────────────────────────────────
 
 function DraggableCard({
   card,
+  columnId,
+  actions,
   isDragging,
   isHighlighted,
   onClick,
+  onMoveCard,
 }: {
   card: KanbanCard;
+  columnId: string;
+  actions?: KanbanColumn["actions"];
   isDragging: boolean;
   isHighlighted: boolean;
   onClick?: () => void;
+  onMoveCard?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: card.id,
@@ -91,6 +103,22 @@ function DraggableCard({
           </span>
         )}
       </div>
+      {actions
+        ?.filter((action) => action.direction !== "back")
+        .map((action) => (
+          <button
+            key={`${card.id}-${action.to}`}
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveCard?.(card.id, columnId, action.to);
+            }}
+            className="mt-3 w-full rounded-lg border border-primary bg-primary px-3 py-2 text-xs font-heading font-bold text-background transition-colors hover:bg-primary-dark cursor-pointer"
+          >
+            Avançar etapa
+          </button>
+        ))}
     </div>
   );
 }
@@ -132,6 +160,7 @@ function DroppableColumn({
   activeCardId,
   highlightedCardId,
   onCardClick,
+  onMoveCard,
 }: {
   column: KanbanColumn;
   isValidTarget: boolean;
@@ -139,6 +168,7 @@ function DroppableColumn({
   activeCardId: string | null;
   highlightedCardId: string | null;
   onCardClick?: (cardId: string) => void;
+  onMoveCard?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
@@ -184,9 +214,12 @@ function DroppableColumn({
             <DraggableCard
               key={card.id}
               card={card}
+              columnId={column.id}
+              actions={column.actions}
               isDragging={activeCardId === card.id}
               isHighlighted={highlightedCardId === card.id}
               onClick={() => onCardClick?.(card.id)}
+              onMoveCard={onMoveCard}
             />
           ))
         )}
@@ -210,6 +243,7 @@ export default function KanbanBoard({
   columns,
   onCardMove,
   onCardClick,
+  canMoveCard,
 }: KanbanBoardProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
@@ -242,14 +276,15 @@ export default function KanbanBoard({
     [columns]
   );
 
-  // Check if target column is the next one
-  const isNextColumn = useCallback(
+  // Check if target column is allowed.
+  const isAllowedMove = useCallback(
     (fromColId: string, toColId: string) => {
+      if (canMoveCard) return canMoveCard(fromColId, toColId);
       const fromIdx = columns.findIndex((c) => c.id === fromColId);
       const toIdx = columns.findIndex((c) => c.id === toColId);
       return toIdx === fromIdx + 1;
     },
-    [columns]
+    [canMoveCard, columns]
   );
 
   function handleDragStart(event: DragStartEvent) {
@@ -278,7 +313,7 @@ export default function KanbanBoard({
     const sourceCol = findCardColumn(cardId);
     if (!sourceCol) return;
     if (sourceCol.id === targetColId) return;
-    if (!isNextColumn(sourceCol.id, targetColId)) return;
+    if (!isAllowedMove(sourceCol.id, targetColId)) return;
 
     // Trigger the move
     onCardMove(cardId, sourceCol.id, targetColId);
@@ -317,7 +352,7 @@ export default function KanbanBoard({
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-12rem)]">
         {columns.map((column) => {
           const isValid = sourceColumn
-            ? isNextColumn(sourceColumn.id, column.id)
+            ? isAllowedMove(sourceColumn.id, column.id)
             : false;
 
           return (
@@ -329,6 +364,7 @@ export default function KanbanBoard({
               activeCardId={activeCardId}
               highlightedCardId={highlightedCardId}
               onCardClick={onCardClick}
+              onMoveCard={onCardMove}
             />
           );
         })}

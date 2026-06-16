@@ -6,13 +6,18 @@ import KanbanListView, { type KanbanListColumn } from "@/components/KanbanListVi
 import TripDetailModal from "@/components/TripDetailModal";
 import NovaViagemForm from "@/components/forms/NovaViagemForm";
 import { useToast } from "@/components/Toast";
-import { fetchTrips, updateTripStatus } from "@/lib/api";
+import { fetchTripDriverCandidates, fetchTrips, updateTripStatus } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import {
   labelForTripStatus,
   requestNotificationPermission,
   showNotification,
 } from "@/lib/notifications";
+import {
+  canMoveTripStatus,
+  getClientConfirmationBlockReason,
+  getTripStatusActions,
+} from "@/lib/trip-status";
 import type { Trip, TripStatus } from "@/types/database";
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
@@ -62,7 +67,7 @@ export default function ViagensPage() {
   }, []);
 
   useEffect(() => {
-    loadTrips();
+    void Promise.resolve().then(loadTrips);
   }, [loadTrips]);
 
   useEffect(() => {
@@ -113,8 +118,25 @@ export default function ViagensPage() {
   }, [loadTrips]);
 
   const handleCardMove = useCallback(
-    async (cardId: string, _fromColumnId: string, toColumnId: string) => {
+    async (cardId: string, fromColumnId: string, toColumnId: string) => {
       const newStatus = toColumnId as TripStatus;
+      if (
+        fromColumnId === "searching_drivers" &&
+        toColumnId === "awaiting_client_confirmation"
+      ) {
+        try {
+          const candidates = await fetchTripDriverCandidates(cardId);
+          const blockReason = getClientConfirmationBlockReason(candidates);
+          if (blockReason) {
+            toast("warning", blockReason);
+            return;
+          }
+        } catch {
+          toast("danger", "Erro ao verificar preços aprovados dos motoristas");
+          return;
+        }
+      }
+
       // Optimistic update
       setTrips((prev) =>
         prev.map((t) => (t.id === cardId ? { ...t, status: newStatus } : t))
@@ -142,6 +164,7 @@ export default function ViagensPage() {
     const colTrips = trips.filter((t) => t.status === col.id);
     return {
       ...col,
+      actions: getTripStatusActions(col.id),
       cards: colTrips.map((t) => ({
         id: t.id,
         title: `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`,
@@ -153,19 +176,9 @@ export default function ViagensPage() {
     };
   });
 
-  const listActionConfig: Record<string, { actionLabel: string; nextColumnId: string }> = {
-    open: { actionLabel: "Aprovar", nextColumnId: "under_review" },
-    under_review: { actionLabel: "Buscar Motorista", nextColumnId: "searching_drivers" },
-    searching_drivers: { actionLabel: "Aguardar cliente", nextColumnId: "awaiting_client_confirmation" },
-    awaiting_client_confirmation: { actionLabel: "Validar motorista", nextColumnId: "awaiting_driver_confirmation" },
-    awaiting_driver_confirmation: { actionLabel: "Agendar", nextColumnId: "scheduled" },
-    scheduled: { actionLabel: "Iniciar", nextColumnId: "started" },
-    started: { actionLabel: "Finalizar", nextColumnId: "finished" },
-  };
-
   const listColumns: KanbanListColumn[] = columns.map((col) => ({
     ...col,
-    ...(listActionConfig[col.id] ?? {}),
+    actions: getTripStatusActions(col.id),
   }));
 
   return (
@@ -229,6 +242,9 @@ export default function ViagensPage() {
             columns={columns}
             onCardMove={handleCardMove}
             onCardClick={(cardId) => handleCardClick(cardId)}
+            canMoveCard={(fromCol, toCol) =>
+              canMoveTripStatus(fromCol as TripStatus, toCol as TripStatus, "forward")
+            }
           />
         </div>
       )}
