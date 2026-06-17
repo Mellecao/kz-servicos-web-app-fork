@@ -238,10 +238,12 @@ export async function cancelTrip(id: string): Promise<void> {
 }
 
 // ─── Trip Driver Candidates ────────────────────────────────
+const tripDriverCandidateSelect = "*, driver_profiles(*, provider_profiles(*, users(*)))";
+
 export async function fetchTripDriverCandidates(tripId: string): Promise<TripDriverCandidate[]> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .select(tripDriverCandidateSelect)
     .eq("trip_id", tripId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -255,7 +257,7 @@ export async function addTripDriverCandidate(
   const { data, error } = await supabase
     .from("trip_driver_candidates")
     .insert({ trip_id: tripId, driver_profile_id: driverProfileId, status: "pending" })
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
   logAdminAction("Motorista adicionado como candidato", tripId, { driver_profile_id: driverProfileId });
@@ -302,15 +304,77 @@ export async function updateTripDriverCandidatePrice(
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
-    .update({ offered_price: offeredPrice })
+    .update({
+      offered_price: offeredPrice,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId)
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
   logAdminAction("Preço do candidato atualizado", tripId, {
     driver_profile_id: driverProfileId,
     offered_price: offeredPrice,
+  });
+  return data as TripDriverCandidate;
+}
+
+export async function rejectTripDriverCandidatePrice(
+  tripId: string,
+  driverProfileId: string
+): Promise<TripDriverCandidate> {
+  const message = "Preço fora do padrão, favor fazer nova proposta";
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({
+      status: "pending",
+      offered_price: null,
+      responded_at: null,
+      price_rejection_reason: message,
+      price_rejected_at: new Date().toISOString(),
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select(tripDriverCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato recusado", tripId, { driver_profile_id: driverProfileId });
+  return data as TripDriverCandidate;
+}
+
+export async function sendKzDriverProposal(
+  tripId: string,
+  driverProfileId: string,
+  price: number
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({
+      status: "pending",
+      offered_price: price,
+      responded_at: null,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: price,
+      kz_proposed_at: new Date().toISOString(),
+      kz_proposal_locked: true,
+    })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select(tripDriverCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Proposta KZ enviada ao candidato", tripId, {
+    driver_profile_id: driverProfileId,
+    kz_proposed_price: price,
   });
   return data as TripDriverCandidate;
 }
@@ -341,7 +405,7 @@ export async function approveDriverCandidate(
     .update({ admin_approved: approved })
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId)
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
   logAdminAction(approved ? "Candidato aprovado para cliente" : "Aprovação do candidato removida", tripId, { driver_profile_id: driverProfileId });
@@ -794,6 +858,21 @@ export async function adminCreateTrip(trip: {
         state?: string | null;
         zip_code?: string | null;
       };
+  stops?: Array<
+    | string
+    | {
+        formatted_address: string;
+        google_place_id?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+        street?: string | null;
+        number?: string | null;
+        neighborhood?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zip_code?: string | null;
+      }
+  >;
   scheduled_datetime: string;
   is_round_trip: boolean;
   return_datetime?: string | null;

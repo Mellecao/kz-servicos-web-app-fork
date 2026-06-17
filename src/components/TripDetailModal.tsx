@@ -22,6 +22,8 @@ import {
   removeTripDriverCandidate,
   updateTripDriverCandidateStatus,
   updateTripDriverCandidatePrice,
+  rejectTripDriverCandidatePrice,
+  sendKzDriverProposal,
   updateTripFinancial,
   selectTripDriver,
   approveDriverCandidate,
@@ -34,6 +36,7 @@ import {
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
 import { supabase } from "@/lib/supabase";
+import { formatBrazilDateTime } from "@/lib/brazil-time";
 
 interface TripDetailModalProps {
   trip: Trip | null;
@@ -89,13 +92,7 @@ const candidateStatusColors: Record<TripDriverCandidateStatus, { bg: string; tex
 };
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatBrazilDateTime(dateStr);
 }
 
 function formatCurrency(value: number | null | undefined) {
@@ -444,6 +441,51 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       toast("success", "Preço do motorista atualizado");
     } catch {
       toast("danger", "Erro ao atualizar preço do motorista");
+    }
+  }
+
+  async function handleRejectCandidatePrice(candidate: TripDriverCandidate) {
+    if (!t) return;
+    try {
+      const updated = await rejectTripDriverCandidatePrice(
+        t.id,
+        candidate.driver_profile_id
+      );
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === candidate.id ? updated : c))
+      );
+      setCandidatePriceInputs((prev) => ({ ...prev, [candidate.id]: "" }));
+      toast("success", "Preço recusado e solicitação devolvida ao motorista");
+    } catch {
+      toast("danger", "Erro ao recusar preço do motorista");
+    }
+  }
+
+  async function handleSendKzProposal(candidate: TripDriverCandidate) {
+    if (!t) return;
+    const rawValue = candidatePriceInputs[candidate.id]?.trim() ?? "";
+    const parsed = Number(rawValue.replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      toast("warning", "Informe uma proposta KZ válida");
+      return;
+    }
+
+    try {
+      const updated = await sendKzDriverProposal(
+        t.id,
+        candidate.driver_profile_id,
+        parsed
+      );
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === candidate.id ? updated : c))
+      );
+      setCandidatePriceInputs((prev) => ({
+        ...prev,
+        [candidate.id]: String(parsed),
+      }));
+      toast("success", "Proposta KZ reenviada ao motorista");
+    } catch {
+      toast("danger", "Erro ao enviar proposta KZ");
     }
   }
 
@@ -824,6 +866,34 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                               className="px-2.5 py-1.5 rounded-lg bg-primary text-background text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer"
                             >
                               Salvar
+                            </button>
+                          </div>
+                          {c.price_rejection_reason ? (
+                            <p className="mt-1 text-xs font-body text-danger">
+                              {c.price_rejection_reason}
+                            </p>
+                          ) : null}
+                          {c.kz_proposal_locked && c.kz_proposed_price != null ? (
+                            <p className="mt-1 text-xs font-body font-semibold text-green-600">
+                              proposta feita pela KZ
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {c.offered_price != null && (
+                              <button
+                                type="button"
+                                onClick={() => handleRejectCandidatePrice(c)}
+                                className="px-3 py-1.5 rounded text-xs font-heading font-bold bg-danger/10 text-danger hover:bg-danger/20 transition-colors cursor-pointer"
+                              >
+                                Recusar preço
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleSendKzProposal(c)}
+                              className="px-3 py-1.5 rounded text-xs font-heading font-bold bg-green-500/10 text-green-700 hover:bg-green-500/20 transition-colors cursor-pointer"
+                            >
+                              Enviar proposta KZ
                             </button>
                           </div>
                           {t.status === "searching_drivers" && candStatus === "accepted" && (

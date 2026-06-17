@@ -42,6 +42,69 @@ function formatClientLabel(user: User): string {
   return user.cpf ? `${user.full_name} - ${user.cpf}` : user.full_name;
 }
 
+type StopAddress = {
+  id: string;
+  label: string;
+  placeAddress: GooglePlaceAddress | null;
+};
+
+function StopAddressField({
+  stop,
+  index,
+  onChange,
+  onRemove,
+}: {
+  stop: StopAddress;
+  index: number;
+  onChange: (stop: StopAddress) => void;
+  onRemove: () => void;
+}) {
+  const places = useGooglePlacesAutocomplete();
+  const detailsSeqRef = useRef(0);
+
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <label className={labelClass}>Parada {index + 1}</label>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs font-heading font-bold text-danger hover:text-danger/80"
+        >
+          Remover
+        </button>
+      </div>
+      <SearchableSelect
+        options={places.options}
+        value={stop.label}
+        onChange={(placeId, label) => {
+          const requestSeq = ++detailsSeqRef.current;
+          onChange({
+            ...stop,
+            label,
+            placeAddress: {
+              formatted_address: label,
+              google_place_id: placeId,
+            },
+          });
+          places.clear();
+          fetchGooglePlaceDetails(placeId, label).then((address) => {
+            if (requestSeq !== detailsSeqRef.current) return;
+            onChange({ ...stop, label: address.formatted_address, placeAddress: address });
+          });
+        }}
+        onSearchChange={(q) => {
+          detailsSeqRef.current++;
+          onChange({ ...stop, label: q, placeAddress: null });
+          places.search(q);
+        }}
+        placeholder="Adicionar parada no percurso"
+        loading={places.loading}
+      />
+    </div>
+  );
+}
+
 export default function NovaViagemForm({
   open,
   onClose,
@@ -62,6 +125,7 @@ export default function NovaViagemForm({
   const [dropoffAddress, setDropoffAddress] = useState("");
   const [dropoffPlaceAddress, setDropoffPlaceAddress] =
     useState<GooglePlaceAddress | null>(null);
+  const [stops, setStops] = useState<StopAddress[]>([]);
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [returnDatetime, setReturnDatetime] = useState("");
@@ -102,6 +166,7 @@ export default function NovaViagemForm({
     setPickupPlaceAddress(null);
     setDropoffAddress("");
     setDropoffPlaceAddress(null);
+    setStops([]);
     setScheduledDatetime("");
     setIsRoundTrip(false);
     setReturnDatetime("");
@@ -166,6 +231,9 @@ export default function NovaViagemForm({
           pickupPlaceAddress ?? { formatted_address: pickupAddress },
         dropoff_address:
           dropoffPlaceAddress ?? { formatted_address: dropoffAddress },
+        stops: stops
+          .map((stop) => stop.placeAddress ?? { formatted_address: stop.label.trim() })
+          .filter((stop) => stop.formatted_address),
         scheduled_datetime: new Date(scheduledDatetime).toISOString(),
         is_round_trip: isRoundTrip,
         return_datetime: isRoundTrip
@@ -266,6 +334,46 @@ export default function NovaViagemForm({
               error={isFieldInvalid(pickupAddress)}
               loading={pickupPlaces.loading}
             />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-body text-contrast">Paradas no percurso</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setStops((prev) => [
+                    ...prev,
+                    {
+                      id:
+                        typeof crypto !== "undefined" && "randomUUID" in crypto
+                          ? crypto.randomUUID()
+                          : `${Date.now()}-${prev.length}`,
+                      label: "",
+                      placeAddress: null,
+                    },
+                  ])
+                }
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-heading font-bold text-dark hover:border-primary hover:text-primary"
+              >
+                + Adicionar parada
+              </button>
+            </div>
+            {stops.map((stop, index) => (
+              <StopAddressField
+                key={stop.id}
+                stop={stop}
+                index={index}
+                onChange={(nextStop) =>
+                  setStops((prev) =>
+                    prev.map((item) => (item.id === stop.id ? nextStop : item))
+                  )
+                }
+                onRemove={() =>
+                  setStops((prev) => prev.filter((item) => item.id !== stop.id))
+                }
+              />
+            ))}
           </div>
 
           {/* Endereço de desembarque */}

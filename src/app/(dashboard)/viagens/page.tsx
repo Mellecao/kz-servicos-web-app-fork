@@ -18,6 +18,7 @@ import {
   getClientConfirmationBlockReason,
   getTripStatusActions,
 } from "@/lib/trip-status";
+import { formatBrazilDateTime } from "@/lib/brazil-time";
 import type { Trip, TripStatus } from "@/types/database";
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
@@ -39,13 +40,7 @@ function shortenAddress(addr: string | undefined | null) {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatBrazilDateTime(dateStr);
 }
 
 export default function ViagensPage() {

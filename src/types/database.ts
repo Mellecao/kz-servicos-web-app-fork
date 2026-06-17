@@ -215,6 +215,11 @@ export interface TripDriverCandidate {
   status: TripDriverCandidateStatus;
   offered_price: number | null;
   admin_approved: boolean;
+  price_rejection_reason?: string | null;
+  price_rejected_at?: string | null;
+  kz_proposed_price?: number | null;
+  kz_proposed_at?: string | null;
+  kz_proposal_locked?: boolean;
   invited_at: string;
   responded_at: string | null;
   observations: string | null;

@@ -9,8 +9,10 @@ import {
   createDriverProfile,
   createVehicle,
   fetchServiceCategories,
+  fetchVehiclesByDriver,
   updateDriverById,
 } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import type { DriverProfile, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
 
 interface NovoMotoristaFormProps {
@@ -67,6 +69,8 @@ export default function NovoMotoristaForm({
   const [color, setColor] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
   const [passengerCapacity, setPassengerCapacity] = useState("");
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,6 +98,8 @@ export default function NovoMotoristaForm({
     setColor(vehicle?.color ?? "");
     setLicensePlate(vehicle?.license_plate ?? "");
     setPassengerCapacity(vehicle?.passenger_capacity ? String(vehicle.passenger_capacity) : "");
+    setProfilePhotoFile(null);
+    setVehiclePhotoFiles([]);
     setEmailError("");
   }, [open, driver]);
 
@@ -114,7 +120,44 @@ export default function NovoMotoristaForm({
     setColor("");
     setLicensePlate("");
     setPassengerCapacity("");
+    setProfilePhotoFile(null);
+    setVehiclePhotoFiles([]);
     setEmailError("");
+  }
+
+  async function uploadProfilePhoto(userId: string) {
+    if (!profilePhotoFile) return;
+    const ext = profilePhotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${userId}/profile-${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("Profile_Images")
+      .upload(path, profilePhotoFile, { upsert: true });
+    if (uploadError) throw uploadError;
+    const publicUrl = `${supabase.storage.from("Profile_Images").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ avatar_url: publicUrl })
+      .eq("id", userId);
+    if (updateError) throw updateError;
+  }
+
+  async function uploadVehiclePhotos(vehicleId: string) {
+    if (vehiclePhotoFiles.length === 0) return;
+    for (const file of vehiclePhotoFiles) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${vehicleId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("Vehicle_Photos")
+        .upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const publicUrl = supabase.storage.from("Vehicle_Photos").getPublicUrl(path).data.publicUrl;
+      const { error: insertError } = await supabase.from("vehicle_photos").insert({
+        vehicle_id: vehicleId,
+        photo_url: publicUrl,
+        photo_type: "front",
+      });
+      if (insertError) throw insertError;
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -187,6 +230,13 @@ export default function NovoMotoristaForm({
             passenger_capacity: passengerCapacity || null,
           },
         });
+        await uploadProfilePhoto(userId);
+        if (vehiclePhotoFiles.length > 0) {
+          const vehicleId =
+            driver.vehicle?.id ??
+            (await fetchVehiclesByDriver(driver.id)).find((v) => v.is_active)?.id;
+          if (vehicleId) await uploadVehiclePhotos(vehicleId);
+        }
       } else {
         // 1. Create user
         const user = await createUser({
@@ -223,8 +273,10 @@ export default function NovoMotoristaForm({
         });
 
         // 5. Create vehicle if any field is filled
+        await uploadProfilePhoto(user.id);
+
         if (hasVehicle) {
-          await createVehicle({
+          const vehicle = await createVehicle({
             driver_profile_id: driverProfile.id,
             brand,
             model,
@@ -233,6 +285,7 @@ export default function NovoMotoristaForm({
             license_plate: licensePlate,
             passenger_capacity: Number(passengerCapacity) || 4,
           });
+          await uploadVehiclePhotos(vehicle.id);
         }
       }
 
@@ -399,6 +452,24 @@ export default function NovoMotoristaForm({
           />
         </div>
 
+        <div>
+          <label htmlFor="driver-profile-photo" className={labelClass}>
+            Foto de perfil
+          </label>
+          <input
+            id="driver-profile-photo"
+            type="file"
+            accept="image/*"
+            onChange={(e) => setProfilePhotoFile(e.target.files?.[0] ?? null)}
+            className={inputClass}
+          />
+          {profilePhotoFile && (
+            <p className="mt-1 text-xs text-contrast font-body">
+              {profilePhotoFile.name}
+            </p>
+          )}
+        </div>
+
         {/* Section: CNH */}
         <div className="border-t border-border pt-4 mt-2" />
         <h3 className={sectionClass}>CNH</h3>
@@ -538,6 +609,27 @@ export default function NovoMotoristaForm({
               className={inputClass}
             />
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="vehicle-photos" className={labelClass}>
+            Fotos do carro
+          </label>
+          <input
+            id="vehicle-photos"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) =>
+              setVehiclePhotoFiles(Array.from(e.target.files ?? []))
+            }
+            className={inputClass}
+          />
+          {vehiclePhotoFiles.length > 0 && (
+            <p className="mt-1 text-xs text-contrast font-body">
+              {vehiclePhotoFiles.length} foto(s) selecionada(s)
+            </p>
+          )}
         </div>
 
       </form>

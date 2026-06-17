@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# Firebase service account keys
+*-serviceaccount.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -45,3 +48,6 @@ next-env.d.ts
 
 # brainstorm sessions
 .superpowers/
+
+# Local Netlify folder
+.netlify

@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       service_category_id,
       pickup_address,
       dropoff_address,
+      stops,
       scheduled_datetime,
       is_round_trip,
       return_datetime,
@@ -38,6 +39,16 @@ export async function POST(request: NextRequest) {
 
     const pickupAddress = normalizeAddressInput(pickup_address);
     const dropoffAddress = normalizeAddressInput(dropoff_address);
+    const normalizedStops = Array.isArray(stops)
+      ? stops.reduce<NonNullable<ReturnType<typeof normalizeAddressInput>>[]>(
+          (acc, stop) => {
+            const normalizedStop = normalizeAddressInput(stop);
+            if (normalizedStop) acc.push(normalizedStop);
+            return acc;
+          },
+          []
+        )
+      : [];
 
     if (!client_id || !pickupAddress || !dropoffAddress || !scheduled_datetime) {
       return NextResponse.json(
@@ -80,6 +91,31 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    if (normalizedStops.length > 0) {
+      const stopRows = [];
+      for (let index = 0; index < normalizedStops.length; index += 1) {
+        const stopAddress = normalizedStops[index];
+        const { data: addressData, error: addressError } = await admin
+          .from("addresses")
+          .insert(stopAddress)
+          .select("id")
+          .single();
+        if (addressError) {
+          return NextResponse.json({ error: addressError.message }, { status: 400 });
+        }
+        stopRows.push({
+          trip_id: data.id,
+          address_id: addressData.id,
+          stop_order: index + 1,
+        });
+      }
+
+      const { error: stopsError } = await admin.from("trip_stops").insert(stopRows);
+      if (stopsError) {
+        return NextResponse.json({ error: stopsError.message }, { status: 400 });
+      }
     }
 
     return NextResponse.json(data, { status: 201 });
