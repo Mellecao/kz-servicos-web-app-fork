@@ -17,6 +17,7 @@ import type {
   Debito,
   PaymentMethod,
   AdminLog,
+  Rating,
 } from "@/types/database";
 
 // ─── Admin Logs ────────────────────────────────────────────
@@ -79,7 +80,7 @@ export async function fetchUsers(): Promise<User[]> {
 export async function fetchClients(): Promise<User[]> {
   const { data, error } = await supabase
     .from("users")
-    .select("*")
+    .select("*, user_saved_addresses(*, addresses(*))")
     .eq("role", "client")
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -101,7 +102,7 @@ export async function fetchTrips(): Promise<Trip[]> {
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*)"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*)"
     )
     .order("scheduled_datetime", { ascending: false });
   if (error) throw error;
@@ -178,7 +179,7 @@ export async function fetchTripById(id: string): Promise<Trip> {
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
     )
     .eq("id", id)
     .single();
@@ -544,7 +545,7 @@ export async function fetchDebitos(): Promise<Debito[]> {
 export async function fetchDriverProfiles(): Promise<DriverProfile[]> {
   const { data, error } = await supabase
     .from("driver_profiles")
-    .select("*, provider_profiles(*, users(*))");
+    .select("*, provider_profiles(*, users(*)), driver_profile_photos(*)");
   if (error) throw error;
   return data as DriverProfile[];
 }
@@ -558,6 +559,21 @@ export async function fetchVehiclesByDriver(
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
   return data as Vehicle[];
+}
+
+// ─── Ratings ───────────────────────────────────────────────
+export async function fetchRatingsForUser(userId: string): Promise<Rating[]> {
+  const { data, error } = await supabase
+    .from("ratings")
+    .select("*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)")
+    .eq("rated_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Rating[];
+}
+
+export function isPublicRating(rating: Pick<Rating, "rating">): boolean {
+  return Number(rating.rating) >= 4;
 }
 
 // ─── Provider Profiles ─────────────────────────────────────

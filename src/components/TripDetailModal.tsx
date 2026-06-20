@@ -269,6 +269,9 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const t = liveTrip;
   const route = `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`;
   const passengerName = t.users?.full_name ?? "—";
+  const orderedStops = [...(t.trip_stops ?? [])].sort(
+    (a, b) => a.stop_order - b.stop_order
+  );
 
   const statusColor = statusColors[t.status] ?? { bg: "#FEBF2220", text: "#FEBF22" };
   const forwardActions = getTripStatusActions(t.status).filter(
@@ -657,6 +660,13 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               <InfoRow label="Cliente" value={t.users?.full_name ?? "—"} />
               <InfoRow label="Categoria" value={t.service_categories?.name ?? "—"} />
               <InfoRow label="Embarque" value={t.pickup_address?.formatted_address ?? "—"} />
+              {orderedStops.map((stop, index) => (
+                <InfoRow
+                  key={stop.id}
+                  label={`Parada ${index + 1}`}
+                  value={stop.addresses?.formatted_address ?? "—"}
+                />
+              ))}
               <InfoRow label="Desembarque" value={t.dropoff_address?.formatted_address ?? "—"} />
               <InfoRow label="Data e hora" value={formatDate(t.scheduled_datetime)} />
               {t.is_round_trip && (

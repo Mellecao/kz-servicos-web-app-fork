@@ -70,6 +70,7 @@ export default function NovoMotoristaForm({
   const [licensePlate, setLicensePlate] = useState("");
   const [passengerCapacity, setPassengerCapacity] = useState("");
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [driverPhotoFiles, setDriverPhotoFiles] = useState<File[]>([]);
   const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
 
   useEffect(() => {
@@ -99,6 +100,7 @@ export default function NovoMotoristaForm({
     setLicensePlate(vehicle?.license_plate ?? "");
     setPassengerCapacity(vehicle?.passenger_capacity ? String(vehicle.passenger_capacity) : "");
     setProfilePhotoFile(null);
+    setDriverPhotoFiles([]);
     setVehiclePhotoFiles([]);
     setEmailError("");
   }, [open, driver]);
@@ -121,6 +123,7 @@ export default function NovoMotoristaForm({
     setLicensePlate("");
     setPassengerCapacity("");
     setProfilePhotoFile(null);
+    setDriverPhotoFiles([]);
     setVehiclePhotoFiles([]);
     setEmailError("");
   }
@@ -155,6 +158,24 @@ export default function NovoMotoristaForm({
         vehicle_id: vehicleId,
         photo_url: publicUrl,
         photo_type: "front",
+      });
+      if (insertError) throw insertError;
+    }
+  }
+
+  async function uploadDriverPhotos(driverProfileId: string) {
+    if (driverPhotoFiles.length === 0) return;
+    for (const file of driverPhotoFiles) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `drivers/${driverProfileId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("Profile_Images")
+        .upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const publicUrl = supabase.storage.from("Profile_Images").getPublicUrl(path).data.publicUrl;
+      const { error: insertError } = await supabase.from("driver_profile_photos").insert({
+        driver_profile_id: driverProfileId,
+        photo_url: publicUrl,
       });
       if (insertError) throw insertError;
     }
@@ -231,6 +252,7 @@ export default function NovoMotoristaForm({
           },
         });
         await uploadProfilePhoto(userId);
+        await uploadDriverPhotos(driver.id);
         if (vehiclePhotoFiles.length > 0) {
           const vehicleId =
             driver.vehicle?.id ??
@@ -274,6 +296,7 @@ export default function NovoMotoristaForm({
 
         // 5. Create vehicle if any field is filled
         await uploadProfilePhoto(user.id);
+        await uploadDriverPhotos(driverProfile.id);
 
         if (hasVehicle) {
           const vehicle = await createVehicle({
@@ -466,6 +489,27 @@ export default function NovoMotoristaForm({
           {profilePhotoFile && (
             <p className="mt-1 text-xs text-contrast font-body">
               {profilePhotoFile.name}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="driver-public-photos" className={labelClass}>
+            Fotos públicas do motorista
+          </label>
+          <input
+            id="driver-public-photos"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) =>
+              setDriverPhotoFiles(Array.from(e.target.files ?? []))
+            }
+            className={inputClass}
+          />
+          {driverPhotoFiles.length > 0 && (
+            <p className="mt-1 text-xs text-contrast font-body">
+              {driverPhotoFiles.length} foto(s) selecionada(s)
             </p>
           )}
         </div>

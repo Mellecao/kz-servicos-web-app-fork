@@ -37,6 +37,7 @@ export interface User {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  user_saved_addresses?: UserSavedAddress[];
 }
 
 export interface ServiceCategory {
@@ -90,6 +91,15 @@ export interface DriverProfile {
   provider_profiles?: ProviderProfile & {
     users?: User;
   };
+  driver_profile_photos?: DriverProfilePhoto[];
+}
+
+export interface DriverProfilePhoto {
+  id: string;
+  driver_profile_id: string;
+  photo_url: string;
+  sort_order: number;
+  created_at: string;
 }
 
 export interface Vehicle {
@@ -121,6 +131,41 @@ export interface Address {
   latitude: number | null;
   longitude: number | null;
   created_at: string;
+}
+
+export type UserSavedAddressLabel = "home" | "work" | "custom";
+
+export interface UserSavedAddress {
+  id: string;
+  user_id: string;
+  address_id: string;
+  label: UserSavedAddressLabel;
+  custom_label: string | null;
+  created_at: string;
+  updated_at: string;
+  addresses?: Address;
+}
+
+export interface TripStop {
+  id: string;
+  trip_id: string;
+  address_id: string;
+  stop_order: number;
+  created_at: string;
+  addresses?: Address;
+}
+
+export interface Rating {
+  id: string;
+  trip_id: string | null;
+  service_request_id: string | null;
+  rater_id: string;
+  rated_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  rater?: Pick<User, "id" | "full_name" | "email">;
+  rated?: Pick<User, "id" | "full_name" | "email">;
 }
 
 export interface Trip {
@@ -156,6 +201,7 @@ export interface Trip {
   // Relations
   pickup_address?: Address;
   dropoff_address?: Address;
+  trip_stops?: TripStop[];
   service_categories?: ServiceCategory;
   driver_profiles?: DriverProfile;
   vehicles?: Vehicle;
@@ -248,12 +294,16 @@ export interface Database {
   public: {
     Tables: {
       users: { Row: User };
+      user_saved_addresses: { Row: UserSavedAddress };
       service_categories: { Row: ServiceCategory };
       provider_profiles: { Row: ProviderProfile };
       driver_profiles: { Row: DriverProfile };
+      driver_profile_photos: { Row: DriverProfilePhoto };
       vehicles: { Row: Vehicle };
       addresses: { Row: Address };
       trips: { Row: Trip };
+      trip_stops: { Row: TripStop };
+      ratings: { Row: Rating };
       service_requests: { Row: ServiceRequest };
       admin_logs: { Row: AdminLog };
     };

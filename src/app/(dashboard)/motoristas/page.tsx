@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchDriverProfiles, fetchVehiclesByDriver, deleteUserById } from "@/lib/api";
+import {
+  deleteUserById,
+  fetchDriverProfiles,
+  fetchRatingsForUser,
+  fetchVehiclesByDriver,
+  isPublicRating,
+} from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { DriverProfile, Vehicle, ProviderStatus } from "@/types/database";
+import type { DriverProfile, Rating, Vehicle, ProviderStatus } from "@/types/database";
 import NovoMotoristaForm from "@/components/forms/NovoMotoristaForm";
 
 const statusLabels: Record<ProviderStatus, string> = {
@@ -39,6 +45,35 @@ interface DriverWithVehicle extends DriverProfile {
   vehicle?: Vehicle;
 }
 
+function DriverPublicPhotos({ driver }: { driver: DriverWithVehicle }) {
+  const photos = [...(driver.driver_profile_photos ?? [])]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .slice(0, 3);
+
+  if (photos.length === 0) {
+    return <span className="text-xs text-contrast/60">Sem fotos públicas</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {photos.map((photo) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={photo.id}
+          src={photo.photo_url}
+          alt="Foto pública do motorista"
+          className="h-8 w-8 rounded-lg object-cover border border-border bg-background"
+        />
+      ))}
+      {(driver.driver_profile_photos?.length ?? 0) > photos.length && (
+        <span className="text-xs text-contrast">
+          +{(driver.driver_profile_photos?.length ?? 0) - photos.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function MotoristasPage() {
   const { toast } = useToast();
   const [drivers, setDrivers] = useState<DriverWithVehicle[]>([]);
@@ -48,6 +83,9 @@ export default function MotoristasPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverWithVehicle | null>(null);
+  const [ratingsDriverName, setRatingsDriverName] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [ratingsLoading, setRatingsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
   );
@@ -100,6 +138,25 @@ export default function MotoristasPage() {
       toast("danger", message || "Erro ao excluir motorista.");
     } finally {
       setDeletingUserId(null);
+    }
+  }
+
+  async function handleOpenRatings(driver: DriverWithVehicle) {
+    const user = driver.provider_profiles?.users;
+    if (!user?.id) {
+      toast("danger", "Não foi possível localizar o usuário do motorista.");
+      return;
+    }
+
+    setRatingsDriverName(user.full_name ?? "Motorista");
+    setRatings([]);
+    setRatingsLoading(true);
+    try {
+      setRatings(await fetchRatingsForUser(user.id));
+    } catch {
+      toast("danger", "Erro ao carregar avaliações.");
+    } finally {
+      setRatingsLoading(false);
     }
   }
 
@@ -231,6 +288,9 @@ export default function MotoristasPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-dark text-sm truncate">{name}</p>
                   <p className="text-muted text-xs truncate">{phone}</p>
+                  <div className="mt-2">
+                    <DriverPublicPhotos driver={driver} />
+                  </div>
                 </div>
                 <span
                   className="text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0"
@@ -241,6 +301,15 @@ export default function MotoristasPage() {
                 >
                   {statusLabels[status]}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenRatings(driver)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-dark hover:bg-surface-hover transition-colors"
+                  aria-label={`Ver avaliações de ${name}`}
+                  title="Avaliações"
+                >
+                  ★
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -305,6 +374,9 @@ export default function MotoristasPage() {
                     Telefone
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
+                    Fotos
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
                     Status
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
@@ -346,6 +418,9 @@ export default function MotoristasPage() {
                       </td>
                       <td className="px-5 py-3.5 text-sm text-contrast">{phone}</td>
                       <td className="px-5 py-3.5">
+                        <DriverPublicPhotos driver={driver} />
+                      </td>
+                      <td className="px-5 py-3.5">
                         <span
                           className="text-xs font-medium px-2.5 py-1 rounded-full"
                           style={{
@@ -380,6 +455,13 @@ export default function MotoristasPage() {
                         {rating > 0 ? `⭐ ${rating.toFixed(1)}` : "—"}
                       </td>
                       <td className="px-5 py-3.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRatings(driver)}
+                          className="mr-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-dark hover:bg-surface-hover transition-colors"
+                        >
+                          ★ Avaliações
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -443,6 +525,72 @@ export default function MotoristasPage() {
         }}
         onSuccess={loadDrivers}
       />
+
+      {ratingsDriverName && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-background shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div>
+                <h2 className="text-lg font-heading font-bold text-dark">
+                  Avaliações de {ratingsDriverName}
+                </h2>
+                <p className="mt-1 text-xs text-contrast">
+                  Avaliações negativas são anônimas e serão analisadas pela equipe KZ.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRatingsDriverName(null)}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm text-dark hover:bg-surface-hover"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto p-5">
+              {ratingsLoading ? (
+                <p className="text-sm text-contrast">Carregando avaliações...</p>
+              ) : ratings.length === 0 ? (
+                <p className="text-sm text-contrast">Nenhuma avaliação encontrada.</p>
+              ) : (
+                <div className="space-y-3">
+                  {ratings.map((item) => {
+                    const publicRating = isPublicRating(item);
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-border bg-surface p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-heading font-bold text-dark">
+                            ★ {Number(item.rating).toFixed(1)}
+                          </span>
+                          <span className="text-xs text-contrast">
+                            {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-contrast">
+                          {publicRating
+                            ? `Avaliador: ${item.rater?.full_name ?? item.rater?.email ?? "Cliente"}`
+                            : "Avaliador: anônimo para avaliação negativa"}
+                        </p>
+                        {item.comment && (
+                          <p className="mt-2 text-sm text-dark">{item.comment}</p>
+                        )}
+                        {!publicRating && (
+                          <p className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+                            Comentário restrito ao painel admin para análise da equipe KZ.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
