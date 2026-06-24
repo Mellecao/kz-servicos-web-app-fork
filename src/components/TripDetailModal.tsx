@@ -33,6 +33,7 @@ import {
   getClientConfirmationBlockReason,
   getTripStatusActions,
 } from "@/lib/trip-status";
+import { canAdminApproveForClient } from "@/lib/trip-candidate-actions";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
 import { supabase } from "@/lib/supabase";
@@ -147,6 +148,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
   const [resendingDriverConfirmation, setResendingDriverConfirmation] = useState(false);
+  const [selectingCandidateId, setSelectingCandidateId] = useState<string | null>(null);
   const [candidatePriceInputs, setCandidatePriceInputs] = useState<Record<string, string>>({});
 
 
@@ -217,6 +219,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setRejectReason("");
     setShowDeleteConfirm(false);
     setSelectedDriverId("");
+    setSelectingCandidateId(null);
     setCandidatePriceInputs({});
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
@@ -526,6 +529,14 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
 
   const handleSelectDriver = async (candidate: TripDriverCandidate) => {
     if (candidate.offered_price == null) return;
+    const driverName =
+      candidate.driver_profiles?.provider_profiles?.users?.full_name ?? "Motorista";
+    const confirmed = window.confirm(
+      `Aprovar a proposta de ${driverName} em nome do cliente por R$ ${candidate.offered_price.toFixed(2)}?`
+    );
+    if (!confirmed) return;
+
+    setSelectingCandidateId(candidate.id);
     try {
       await selectTripDriver(
         t.id,
@@ -539,9 +550,12 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setCandidates(updatedCandidates);
       setLiveTrip(updatedTrip);
+      onUpdate();
       toast("success", `Aguardando validação do motorista — R$ ${candidate.offered_price.toFixed(2)}`);
     } catch {
       toast("danger", "Erro ao selecionar motorista");
+    } finally {
+      setSelectingCandidateId(null);
     }
   };
 
@@ -907,16 +921,32 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             </button>
                           </div>
                           {t.status === "searching_drivers" && candStatus === "accepted" && (
-                            <button
-                              onClick={() => handleApproveCandidate(c.driver_profile_id, !c.admin_approved)}
-                              className={`mt-2 px-3 py-1.5 rounded text-xs font-heading font-bold transition-colors cursor-pointer ${
-                                c.admin_approved
-                                  ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
-                                  : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
-                              }`}
-                            >
-                              {c.admin_approved ? "Aprovado ✓" : "Aprovar para cliente"}
-                            </button>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleApproveCandidate(c.driver_profile_id, !c.admin_approved)}
+                                disabled={selectingCandidateId !== null}
+                                className={`px-3 py-1.5 rounded text-xs font-heading font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  c.admin_approved
+                                    ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
+                                    : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
+                                }`}
+                              >
+                                {c.admin_approved ? "Aprovado ✓" : "Aprovar para cliente"}
+                              </button>
+                              {canAdminApproveForClient(t.status, c) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectDriver(c)}
+                                  disabled={selectingCandidateId !== null}
+                                  className="px-3 py-1.5 rounded bg-primary text-background text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {selectingCandidateId === c.id
+                                    ? "Aprovando..."
+                                    : "Cliente: aprovar"}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
