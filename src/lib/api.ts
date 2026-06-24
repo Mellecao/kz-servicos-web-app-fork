@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { isMissingPostgrestRelationError } from "@/lib/postgrest-errors";
 import type {
   User,
   Trip,
@@ -99,14 +100,24 @@ export async function fetchUserById(id: string): Promise<User> {
 
 // ─── Trips ─────────────────────────────────────────────────
 export async function fetchTrips(): Promise<Trip[]> {
-  const { data, error } = await supabase
+  const query = supabase
     .from("trips")
     .select(
       "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*)"
     )
     .order("scheduled_datetime", { ascending: false });
-  if (error) throw error;
-  return data as Trip[];
+  const { data, error } = await query;
+  if (!error) return data as Trip[];
+  if (!isMissingPostgrestRelationError(error)) throw error;
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*)"
+    )
+    .order("scheduled_datetime", { ascending: false });
+  if (fallbackError) throw fallbackError;
+  return fallbackData as Trip[];
 }
 
 // ─── Service Requests ──────────────────────────────────────
@@ -183,8 +194,18 @@ export async function fetchTripById(id: string): Promise<Trip> {
     )
     .eq("id", id)
     .single();
-  if (error) throw error;
-  return data as Trip;
+  if (!error) return data as Trip;
+  if (!isMissingPostgrestRelationError(error)) throw error;
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
+    )
+    .eq("id", id)
+    .single();
+  if (fallbackError) throw fallbackError;
+  return fallbackData as Trip;
 }
 
 // ─── Trip Status History ───────────────────────────────────
