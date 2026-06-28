@@ -289,6 +289,11 @@ export interface TripStatusHistory {
   created_at: string;
 }
 
+export interface DriverTripHistoryEntry {
+  trip: Trip;
+  ratings: Rating[];
+}
+
 // Supabase Database type for the client
 export interface Database {
   public: {

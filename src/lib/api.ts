@@ -19,15 +19,19 @@ import type {
   PaymentMethod,
   AdminLog,
   Rating,
+  DriverTripHistoryEntry,
 } from "@/types/database";
 
 // ─── Admin Logs ────────────────────────────────────────────
 function logAdminAction(
   action: string,
   entityId: string,
-  details: Record<string, unknown>
+  details: Record<string, unknown>,
 ): void {
-  supabase.from("admin_logs").insert({ action, entity_id: entityId, details }).then();
+  supabase
+    .from("admin_logs")
+    .insert({ action, entity_id: entityId, details })
+    .then();
 }
 
 export async function fetchAdminLogs(): Promise<AdminLog[]> {
@@ -103,7 +107,7 @@ export async function fetchTrips(): Promise<Trip[]> {
   const query = supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*)"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*)",
     )
     .order("scheduled_datetime", { ascending: false });
   const { data, error } = await query;
@@ -113,7 +117,7 @@ export async function fetchTrips(): Promise<Trip[]> {
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*)"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*)",
     )
     .order("scheduled_datetime", { ascending: false });
   if (fallbackError) throw fallbackError;
@@ -124,9 +128,7 @@ export async function fetchTrips(): Promise<Trip[]> {
 export async function fetchServiceRequests(): Promise<ServiceRequest[]> {
   const { data, error } = await supabase
     .from("service_requests")
-    .select(
-      "*, service_categories(*), addresses(*), users!client_id(*)"
-    )
+    .select("*, service_categories(*), addresses(*), users!client_id(*)")
     .order("service_date", { ascending: false });
   if (error) throw error;
   return data as ServiceRequest[];
@@ -141,11 +143,15 @@ export async function updateTripFinancial(
     final_price?: number | null;
     payment_method?: PaymentMethod | null;
     payment_date?: string | null;
-  }
+  },
 ): Promise<void> {
   const { error } = await supabase.from("trips").update(payload).eq("id", id);
   if (error) throw error;
-  logAdminAction("Financeiro atualizado", id, payload as Record<string, unknown>);
+  logAdminAction(
+    "Financeiro atualizado",
+    id,
+    payload as Record<string, unknown>,
+  );
 }
 
 // ─── Update Service Request Financial ─────────────────────
@@ -156,14 +162,20 @@ export async function updateServiceRequestFinancial(
     is_provider_paied?: boolean;
     final_price?: number | null;
     payment_method?: PaymentMethod | null;
-  }
+  },
 ): Promise<void> {
-  const { error } = await supabase.from("service_requests").update(payload).eq("id", id);
+  const { error } = await supabase
+    .from("service_requests")
+    .update(payload)
+    .eq("id", id);
   if (error) throw error;
 }
 
 // ─── Update Trip Status ────────────────────────────────────
-export async function updateTripStatus(id: string, status: TripStatus): Promise<void> {
+export async function updateTripStatus(
+  id: string,
+  status: TripStatus,
+): Promise<void> {
   const { error } = await supabase
     .from("trips")
     .update({ status })
@@ -190,7 +202,7 @@ export async function fetchTripById(id: string): Promise<Trip> {
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
     )
     .eq("id", id)
     .single();
@@ -200,7 +212,7 @@ export async function fetchTripById(id: string): Promise<Trip> {
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
     )
     .eq("id", id)
     .single();
@@ -209,7 +221,9 @@ export async function fetchTripById(id: string): Promise<Trip> {
 }
 
 // ─── Trip Status History ───────────────────────────────────
-export async function fetchTripStatusHistory(tripId: string): Promise<TripStatusHistory[]> {
+export async function fetchTripStatusHistory(
+  tripId: string,
+): Promise<TripStatusHistory[]> {
   const { data, error } = await supabase
     .from("trip_status_history")
     .select("*")
@@ -260,9 +274,12 @@ export async function cancelTrip(id: string): Promise<void> {
 }
 
 // ─── Trip Driver Candidates ────────────────────────────────
-const tripDriverCandidateSelect = "*, driver_profiles(*, provider_profiles(*, users(*)))";
+const tripDriverCandidateSelect =
+  "*, driver_profiles(*, provider_profiles(*, users(*)))";
 
-export async function fetchTripDriverCandidates(tripId: string): Promise<TripDriverCandidate[]> {
+export async function fetchTripDriverCandidates(
+  tripId: string,
+): Promise<TripDriverCandidate[]> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
     .select(tripDriverCandidateSelect)
@@ -274,21 +291,27 @@ export async function fetchTripDriverCandidates(tripId: string): Promise<TripDri
 
 export async function addTripDriverCandidate(
   tripId: string,
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
-    .insert({ trip_id: tripId, driver_profile_id: driverProfileId, status: "pending" })
+    .insert({
+      trip_id: tripId,
+      driver_profile_id: driverProfileId,
+      status: "pending",
+    })
     .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
-  logAdminAction("Motorista adicionado como candidato", tripId, { driver_profile_id: driverProfileId });
+  logAdminAction("Motorista adicionado como candidato", tripId, {
+    driver_profile_id: driverProfileId,
+  });
   return data as TripDriverCandidate;
 }
 
 export async function removeTripDriverCandidate(
   tripId: string,
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<void> {
   const { error } = await supabase
     .from("trip_driver_candidates")
@@ -296,13 +319,15 @@ export async function removeTripDriverCandidate(
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
-  logAdminAction("Candidato removido", tripId, { driver_profile_id: driverProfileId });
+  logAdminAction("Candidato removido", tripId, {
+    driver_profile_id: driverProfileId,
+  });
 }
 
 export async function updateTripDriverCandidateStatus(
   tripId: string,
   driverProfileId: string,
-  status: TripDriverCandidateStatus
+  status: TripDriverCandidateStatus,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
@@ -315,14 +340,17 @@ export async function updateTripDriverCandidateStatus(
     .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
     .single();
   if (error) throw error;
-  logAdminAction("Status do candidato atualizado", tripId, { driver_profile_id: driverProfileId, status });
+  logAdminAction("Status do candidato atualizado", tripId, {
+    driver_profile_id: driverProfileId,
+    status,
+  });
   return data as TripDriverCandidate;
 }
 
 export async function updateTripDriverCandidatePrice(
   tripId: string,
   driverProfileId: string,
-  offeredPrice: number | null
+  offeredPrice: number | null,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
@@ -348,7 +376,7 @@ export async function updateTripDriverCandidatePrice(
 
 export async function rejectTripDriverCandidatePrice(
   tripId: string,
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<TripDriverCandidate> {
   const message = "Preço fora do padrão, favor fazer nova proposta";
   const { data, error } = await supabase
@@ -368,14 +396,16 @@ export async function rejectTripDriverCandidatePrice(
     .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
-  logAdminAction("Preço do candidato recusado", tripId, { driver_profile_id: driverProfileId });
+  logAdminAction("Preço do candidato recusado", tripId, {
+    driver_profile_id: driverProfileId,
+  });
   return data as TripDriverCandidate;
 }
 
 export async function sendKzDriverProposal(
   tripId: string,
   driverProfileId: string,
-  price: number
+  price: number,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
@@ -405,22 +435,25 @@ export async function selectTripDriver(
   tripId: string,
   candidateId: string,
   driverProfileId: string,
-  offeredPrice: number
+  offeredPrice: number,
 ): Promise<void> {
-  const { error } = await supabase.rpc('select_trip_driver', {
+  const { error } = await supabase.rpc("select_trip_driver", {
     p_trip_id: tripId,
     p_candidate_id: candidateId,
     p_driver_profile_id: driverProfileId,
     p_offered_price: offeredPrice,
   });
   if (error) throw new Error(error.message);
-  logAdminAction("Motorista selecionado", tripId, { driver_profile_id: driverProfileId, offered_price: offeredPrice });
+  logAdminAction("Motorista selecionado", tripId, {
+    driver_profile_id: driverProfileId,
+    offered_price: offeredPrice,
+  });
 }
 
 export async function approveDriverCandidate(
   tripId: string,
   driverProfileId: string,
-  approved: boolean
+  approved: boolean,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
@@ -430,11 +463,19 @@ export async function approveDriverCandidate(
     .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
-  logAdminAction(approved ? "Candidato aprovado para cliente" : "Aprovação do candidato removida", tripId, { driver_profile_id: driverProfileId });
+  logAdminAction(
+    approved
+      ? "Candidato aprovado para cliente"
+      : "Aprovação do candidato removida",
+    tripId,
+    { driver_profile_id: driverProfileId },
+  );
   return data as TripDriverCandidate;
 }
 
-export async function resendDriverConfirmationNotification(tripId: string): Promise<void> {
+export async function resendDriverConfirmationNotification(
+  tripId: string,
+): Promise<void> {
   type Relation<T> = T | T[] | null | undefined;
   type ResendTripRow = {
     status: TripStatus;
@@ -445,12 +486,12 @@ export async function resendDriverConfirmationNotification(tripId: string): Prom
     }>;
   };
   const firstRelation = <T>(value: Relation<T>): T | undefined =>
-    Array.isArray(value) ? value[0] : value ?? undefined;
+    Array.isArray(value) ? value[0] : (value ?? undefined);
 
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "id, status, driver_profile_id, scheduled_datetime, pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address), driver_profiles(provider_profiles(user_id, users(full_name)))"
+      "id, status, driver_profile_id, scheduled_datetime, pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address), driver_profiles(provider_profiles(user_id, users(full_name)))",
     )
     .eq("id", tripId)
     .single();
@@ -501,7 +542,7 @@ export async function resendDriverConfirmationNotification(tripId: string): Prom
 // ─── Update Service Request Status ─────────────────────────
 export async function updateServiceRequestStatus(
   id: string,
-  status: ServiceRequestStatus
+  status: ServiceRequestStatus,
 ): Promise<void> {
   const { error } = await supabase
     .from("service_requests")
@@ -558,7 +599,7 @@ export async function fetchDebitos(): Promise<Debito[]> {
     }));
 
   return [...tripDebitos, ...serviceDebitos].sort(
-    (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()
+    (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime(),
   );
 }
 
@@ -572,7 +613,7 @@ export async function fetchDriverProfiles(): Promise<DriverProfile[]> {
 }
 
 export async function fetchVehiclesByDriver(
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<Vehicle[]> {
   const { data, error } = await supabase
     .from("vehicles")
@@ -586,11 +627,56 @@ export async function fetchVehiclesByDriver(
 export async function fetchRatingsForUser(userId: string): Promise<Rating[]> {
   const { data, error } = await supabase
     .from("ratings")
-    .select("*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)")
+    .select(
+      "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+    )
     .eq("rated_id", userId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Rating[];
+}
+
+export async function fetchDriverTripHistory(
+  driverProfileId: string,
+): Promise<DriverTripHistoryEntry[]> {
+  const { data: trips, error: tripsError } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+    )
+    .eq("driver_profile_id", driverProfileId)
+    .eq("status", "finished")
+    .order("finished_at", { ascending: false });
+  if (tripsError) throw tripsError;
+
+  const tripRows = (trips ?? []) as Trip[];
+  if (tripRows.length === 0) return [];
+
+  const { data: ratings, error: ratingsError } = await supabase
+    .from("ratings")
+    .select(
+      "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+    )
+    .in(
+      "trip_id",
+      tripRows.map((trip) => trip.id),
+    )
+    .order("created_at", { ascending: false });
+  if (ratingsError) throw ratingsError;
+
+  const ratingsByTrip = new Map<string, Rating[]>();
+  for (const rating of (ratings ?? []) as Rating[]) {
+    if (!rating.trip_id) continue;
+    ratingsByTrip.set(rating.trip_id, [
+      ...(ratingsByTrip.get(rating.trip_id) ?? []),
+      rating,
+    ]);
+  }
+
+  return tripRows.map((trip) => ({
+    trip,
+    ratings: ratingsByTrip.get(trip.id) ?? [],
+  }));
 }
 
 export function isPublicRating(rating: Pick<Rating, "rating">): boolean {
@@ -609,11 +695,33 @@ export async function fetchProviderProfiles(): Promise<ProviderProfile[]> {
 // ─── Dashboard Stats ───────────────────────────────────────
 export async function fetchDashboardStats() {
   const now = new Date();
-  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const startOfThisMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1,
+  ).toISOString();
+  const startOfLastMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() - 1,
+    1,
+  ).toISOString();
+  const endOfLastMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    0,
+    23,
+    59,
+    59,
+    999,
+  ).toISOString();
+  const sixMonthsAgo = new Date(
+    now.getFullYear(),
+    now.getMonth() - 5,
+    1,
+  ).toISOString();
+  const thirtyDaysAgo = new Date(
+    now.getTime() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   const [
     tripsResult,
@@ -631,7 +739,9 @@ export async function fetchDashboardStats() {
       .select("id, status, final_price, estimated_price, is_paid, created_at"),
     supabase
       .from("service_requests")
-      .select("id, status, final_price, estimated_price, is_paid, created_at, updated_at"),
+      .select(
+        "id, status, final_price, estimated_price, is_paid, created_at, updated_at",
+      ),
     supabase
       .from("trips")
       .select("final_price, payment_date, updated_at, payment_method")
@@ -654,14 +764,14 @@ export async function fetchDashboardStats() {
     supabase
       .from("trips")
       .select(
-        "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)"
+        "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)",
       )
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
       .from("service_requests")
       .select(
-        "id, status, service_date, description, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), service_categories(name)"
+        "id, status, service_date, description, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), service_categories(name)",
       )
       .order("created_at", { ascending: false })
       .limit(5),
@@ -675,8 +785,10 @@ export async function fetchDashboardStats() {
 
   // ── Revenue ────────────────────────────────────────────
   // Use payment_date when available, fall back to updated_at
-  const tripEffectiveDate = (t: { payment_date?: string | null; updated_at: string }) =>
-    t.payment_date ?? t.updated_at;
+  const tripEffectiveDate = (t: {
+    payment_date?: string | null;
+    updated_at: string;
+  }) => t.payment_date ?? t.updated_at;
 
   const revenueThisMonth =
     paidTrips
@@ -694,7 +806,10 @@ export async function fetchDashboardStats() {
       })
       .reduce((s, t) => s + (t.final_price ?? 0), 0) +
     paidServices
-      .filter((s) => s.updated_at >= startOfLastMonth && s.updated_at <= endOfLastMonth)
+      .filter(
+        (s) =>
+          s.updated_at >= startOfLastMonth && s.updated_at <= endOfLastMonth,
+      )
       .reduce((s, t) => s + (t.final_price ?? 0), 0);
 
   const revenueChange =
@@ -711,7 +826,7 @@ export async function fetchDashboardStats() {
       .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0);
 
   const allPaid = [...paidTrips, ...paidServices].filter(
-    (i) => (i.final_price ?? 0) > 0
+    (i) => (i.final_price ?? 0) > 0,
   );
   const avgTicket =
     allPaid.length > 0
@@ -720,10 +835,17 @@ export async function fetchDashboardStats() {
 
   // ── Operations ─────────────────────────────────────────
   const activeTripsStatuses = new Set([
-    "started", "scheduled", "searching_drivers",
-    "awaiting_client_confirmation", "awaiting_driver_confirmation",
+    "started",
+    "scheduled",
+    "searching_drivers",
+    "awaiting_client_confirmation",
+    "awaiting_driver_confirmation",
   ]);
-  const activeServiceStatuses = new Set(["in_progress", "assigned", "searching_provider"]);
+  const activeServiceStatuses = new Set([
+    "in_progress",
+    "assigned",
+    "searching_provider",
+  ]);
   const activeOps =
     trips.filter((t) => activeTripsStatuses.has(t.status)).length +
     services.filter((s) => activeServiceStatuses.has(s.status)).length;
@@ -735,19 +857,36 @@ export async function fetchDashboardStats() {
   const completionRate =
     recentAll.length > 0
       ? Math.round(
-          (recentAll.filter((i) => i.status === "finished").length / recentAll.length) * 100
+          (recentAll.filter((i) => i.status === "finished").length /
+            recentAll.length) *
+            100,
         )
       : 0;
 
   const avgRating =
     ratings.length > 0
       ? Number(
-          (ratings.reduce((s, r) => s + Number(r.rating), 0) / ratings.length).toFixed(1)
+          (
+            ratings.reduce((s, r) => s + Number(r.rating), 0) / ratings.length
+          ).toFixed(1),
         )
       : 0;
 
   // ── Monthly chart (6 months) ───────────────────────────
-  const MONTH_LABELS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const MONTH_LABELS = [
+    "Jan",
+    "Fev",
+    "Mar",
+    "Abr",
+    "Mai",
+    "Jun",
+    "Jul",
+    "Ago",
+    "Set",
+    "Out",
+    "Nov",
+    "Dez",
+  ];
   const monthlyRevenue = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     return {
@@ -794,10 +933,10 @@ export async function fetchDashboardStats() {
 
   // ── Alerts ─────────────────────────────────────────────
   const alertAwaitingClient = trips.filter(
-    (t) => t.status === "awaiting_client_confirmation"
+    (t) => t.status === "awaiting_client_confirmation",
   ).length;
   const alertAwaitingDriver = trips.filter(
-    (t) => t.status === "awaiting_driver_confirmation"
+    (t) => t.status === "awaiting_driver_confirmation",
   ).length;
   const alertUnderReview =
     trips.filter((t) => t.status === "under_review").length +
@@ -1010,7 +1149,7 @@ export async function updateUserById(
     cpf?: string | null;
     date_of_birth?: string | null;
     is_active?: boolean;
-  }
+  },
 ): Promise<User> {
   const res = await fetch(`/api/users/${id}`, {
     method: "PATCH",
@@ -1046,7 +1185,7 @@ export async function updateDriverById(
       license_plate?: string | null;
       passenger_capacity?: number | string | null;
     };
-  }
+  },
 ): Promise<DriverProfile> {
   const res = await fetch(`/api/drivers/${id}`, {
     method: "PATCH",
@@ -1106,7 +1245,11 @@ export async function createVehicle(vehicle: {
 }) {
   const { data, error } = await supabase
     .from("vehicles")
-    .insert({ ...vehicle, vehicle_document_url: vehicle.vehicle_document_url ?? "", is_active: true })
+    .insert({
+      ...vehicle,
+      vehicle_document_url: vehicle.vehicle_document_url ?? "",
+      is_active: true,
+    })
     .select()
     .single();
   if (error) throw error;

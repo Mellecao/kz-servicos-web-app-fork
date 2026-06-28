@@ -3,13 +3,20 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   deleteUserById,
+  fetchDriverTripHistory,
   fetchDriverProfiles,
   fetchRatingsForUser,
   fetchVehiclesByDriver,
   isPublicRating,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { DriverProfile, Rating, Vehicle, ProviderStatus } from "@/types/database";
+import type {
+  DriverProfile,
+  DriverTripHistoryEntry,
+  Rating,
+  Vehicle,
+  ProviderStatus,
+} from "@/types/database";
 import NovoMotoristaForm from "@/components/forms/NovoMotoristaForm";
 
 const statusLabels: Record<ProviderStatus, string> = {
@@ -29,6 +36,25 @@ const statusColors: Record<ProviderStatus, string> = {
 function formatDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function formatDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatCurrency(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
 }
 
 function getInitials(name: string): string {
@@ -82,12 +108,23 @@ export default function MotoristasPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<DriverWithVehicle | null>(null);
-  const [ratingsDriverName, setRatingsDriverName] = useState<string | null>(null);
+  const [editingDriver, setEditingDriver] = useState<DriverWithVehicle | null>(
+    null,
+  );
+  const [ratingsDriverName, setRatingsDriverName] = useState<string | null>(
+    null,
+  );
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [ratingsLoading, setRatingsLoading] = useState(false);
+  const [historyDriverName, setHistoryDriverName] = useState<string | null>(
+    null,
+  );
+  const [tripHistory, setTripHistory] = useState<DriverTripHistoryEntry[]>([]);
+  const [tripHistoryLoading, setTripHistoryLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
-    typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
+    typeof window !== "undefined" && window.innerWidth < 768
+      ? "cards"
+      : "table",
   );
 
   const loadDrivers = useCallback(() => {
@@ -98,12 +135,13 @@ export default function MotoristasPage() {
           driversList.map(async (d) => {
             try {
               const vehicles = await fetchVehiclesByDriver(d.id);
-              const activeVehicle = vehicles.find((v) => v.is_active) ?? vehicles[0];
+              const activeVehicle =
+                vehicles.find((v) => v.is_active) ?? vehicles[0];
               return { ...d, vehicle: activeVehicle } as DriverWithVehicle;
             } catch {
               return { ...d } as DriverWithVehicle;
             }
-          })
+          }),
         );
         setDrivers(withVehicles);
       })
@@ -124,7 +162,7 @@ export default function MotoristasPage() {
     }
 
     const confirmed = window.confirm(
-      `Excluir ${name}? Essa ação apaga o motorista, veículo e perfil de acesso.`
+      `Excluir ${name}? Essa ação apaga o motorista, veículo e perfil de acesso.`,
     );
     if (!confirmed) return;
 
@@ -160,11 +198,26 @@ export default function MotoristasPage() {
     }
   }
 
+  async function handleOpenTripHistory(driver: DriverWithVehicle) {
+    const name = driver.provider_profiles?.users?.full_name ?? "Motorista";
+    setHistoryDriverName(name);
+    setTripHistory([]);
+    setTripHistoryLoading(true);
+    try {
+      setTripHistory(await fetchDriverTripHistory(driver.id));
+    } catch {
+      toast("danger", "Erro ao carregar histórico de corridas.");
+    } finally {
+      setTripHistoryLoading(false);
+    }
+  }
+
   const filtered = drivers.filter((d) => {
     const name = d.provider_profiles?.users?.full_name ?? "";
     const phone = d.provider_profiles?.users?.phone ?? "";
     const q = search.toLowerCase();
-    const matchSearch = name.toLowerCase().includes(q) || phone.toLowerCase().includes(q);
+    const matchSearch =
+      name.toLowerCase().includes(q) || phone.toLowerCase().includes(q);
     const status = d.provider_profiles?.status ?? "";
     const matchStatus = statusFilter ? status === statusFilter : true;
     return matchSearch && matchStatus;
@@ -175,7 +228,9 @@ export default function MotoristasPage() {
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl md:text-3xl font-heading font-black text-dark">Motoristas</h1>
+          <h1 className="text-xl md:text-3xl font-heading font-black text-dark">
+            Motoristas
+          </h1>
           <p className="text-contrast text-sm mt-1">
             Gerencie os motoristas cadastrados na plataforma
           </p>
@@ -272,9 +327,11 @@ export default function MotoristasPage() {
         /* Cards view */
         <div className="flex flex-col gap-2">
           {filtered.map((driver) => {
-            const name = driver.provider_profiles?.users?.full_name ?? "Sem nome";
+            const name =
+              driver.provider_profiles?.users?.full_name ?? "Sem nome";
             const phone = driver.provider_profiles?.users?.phone ?? "—";
-            const status = (driver.provider_profiles?.status ?? "pending") as ProviderStatus;
+            const status = (driver.provider_profiles?.status ??
+              "pending") as ProviderStatus;
             const userId = driver.provider_profiles?.users?.id;
 
             return (
@@ -282,11 +339,24 @@ export default function MotoristasPage() {
                 key={driver.id}
                 className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary transition-colors"
               >
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenTripHistory(driver)}
+                  className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0 hover:bg-primary-dark transition-colors cursor-pointer"
+                  aria-label={`Ver histórico de corridas de ${name}`}
+                  title="Histórico de corridas"
+                >
                   {getInitials(name)}
-                </div>
+                </button>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-dark text-sm truncate">{name}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTripHistory(driver)}
+                    className="block max-w-full font-semibold text-dark text-sm truncate hover:text-primary transition-colors cursor-pointer"
+                    title="Histórico de corridas"
+                  >
+                    {name}
+                  </button>
                   <p className="text-muted text-xs truncate">{phone}</p>
                   <div className="mt-2">
                     <DriverPublicPhotos driver={driver} />
@@ -395,9 +465,11 @@ export default function MotoristasPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((driver) => {
-                  const name = driver.provider_profiles?.users?.full_name ?? "Sem nome";
+                  const name =
+                    driver.provider_profiles?.users?.full_name ?? "Sem nome";
                   const phone = driver.provider_profiles?.users?.phone ?? "—";
-                  const status = (driver.provider_profiles?.status ?? "pending") as ProviderStatus;
+                  const status = (driver.provider_profiles?.status ??
+                    "pending") as ProviderStatus;
                   const rating = driver.provider_profiles?.average_rating ?? 0;
                   const userId = driver.provider_profiles?.users?.id;
 
@@ -413,10 +485,19 @@ export default function MotoristasPage() {
                               {getInitials(name)}
                             </span>
                           </div>
-                          <span className="text-sm font-medium text-dark">{name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTripHistory(driver)}
+                            className="text-left text-sm font-medium text-dark hover:text-primary transition-colors cursor-pointer"
+                            title="Histórico de corridas"
+                          >
+                            {name}
+                          </button>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-contrast">{phone}</td>
+                      <td className="px-5 py-3.5 text-sm text-contrast">
+                        {phone}
+                      </td>
                       <td className="px-5 py-3.5">
                         <DriverPublicPhotos driver={driver} />
                       </td>
@@ -432,7 +513,9 @@ export default function MotoristasPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-contrast">
-                        {driver.cnh_category ? `Cat. ${driver.cnh_category}` : "—"}
+                        {driver.cnh_category
+                          ? `Cat. ${driver.cnh_category}`
+                          : "—"}
                         {driver.cnh_expiration_date
                           ? ` • Venc. ${formatDate(driver.cnh_expiration_date)}`
                           : ""}
@@ -440,12 +523,16 @@ export default function MotoristasPage() {
                       <td className="px-5 py-3.5">
                         <span
                           className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                            driver.is_available ? "text-success" : "text-contrast/50"
+                            driver.is_available
+                              ? "text-success"
+                              : "text-contrast/50"
                           }`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              driver.is_available ? "bg-success" : "bg-contrast/30"
+                              driver.is_available
+                                ? "bg-success"
+                                : "bg-contrast/30"
                             }`}
                           />
                           {driver.is_available ? "Disponível" : "Indisponível"}
@@ -504,7 +591,9 @@ export default function MotoristasPage() {
                               d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
                             />
                           </svg>
-                          {deletingUserId === userId ? "Excluindo..." : "Excluir"}
+                          {deletingUserId === userId
+                            ? "Excluindo..."
+                            : "Excluir"}
                         </button>
                       </td>
                     </tr>
@@ -535,7 +624,8 @@ export default function MotoristasPage() {
                   Avaliações de {ratingsDriverName}
                 </h2>
                 <p className="mt-1 text-xs text-contrast">
-                  Avaliações negativas são anônimas e serão analisadas pela equipe KZ.
+                  Avaliações negativas são anônimas e serão analisadas pela
+                  equipe KZ.
                 </p>
               </div>
               <button
@@ -549,9 +639,13 @@ export default function MotoristasPage() {
 
             <div className="max-h-[70vh] overflow-y-auto p-5">
               {ratingsLoading ? (
-                <p className="text-sm text-contrast">Carregando avaliações...</p>
+                <p className="text-sm text-contrast">
+                  Carregando avaliações...
+                </p>
               ) : ratings.length === 0 ? (
-                <p className="text-sm text-contrast">Nenhuma avaliação encontrada.</p>
+                <p className="text-sm text-contrast">
+                  Nenhuma avaliação encontrada.
+                </p>
               ) : (
                 <div className="space-y-3">
                   {ratings.map((item) => {
@@ -566,7 +660,9 @@ export default function MotoristasPage() {
                             ★ {Number(item.rating).toFixed(1)}
                           </span>
                           <span className="text-xs text-contrast">
-                            {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                            {new Date(item.created_at).toLocaleDateString(
+                              "pt-BR",
+                            )}
                           </span>
                         </div>
                         <p className="mt-2 text-xs text-contrast">
@@ -575,13 +671,138 @@ export default function MotoristasPage() {
                             : "Avaliador: anônimo para avaliação negativa"}
                         </p>
                         {item.comment && (
-                          <p className="mt-2 text-sm text-dark">{item.comment}</p>
+                          <p className="mt-2 text-sm text-dark">
+                            {item.comment}
+                          </p>
                         )}
                         {!publicRating && (
                           <p className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
-                            Comentário restrito ao painel admin para análise da equipe KZ.
+                            Comentário restrito ao painel admin para análise da
+                            equipe KZ.
                           </p>
                         )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyDriverName && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-xl border border-border bg-background shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div>
+                <h2 className="text-lg font-heading font-bold text-dark">
+                  Histórico de corridas de {historyDriverName}
+                </h2>
+                <p className="mt-1 text-xs text-contrast">
+                  Corridas finalizadas, detalhes da viagem e avaliações
+                  registradas.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryDriverName(null)}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm text-dark hover:bg-surface-hover"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="max-h-[72vh] overflow-y-auto p-5">
+              {tripHistoryLoading ? (
+                <p className="text-sm text-contrast">Carregando histórico...</p>
+              ) : tripHistory.length === 0 ? (
+                <p className="text-sm text-contrast">
+                  Nenhuma corrida finalizada encontrada para este motorista.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {tripHistory.map(({ trip, ratings: tripRatings }) => {
+                    const price = trip.final_price ?? trip.estimated_price;
+                    return (
+                      <div
+                        key={trip.id}
+                        className="rounded-xl border border-border bg-surface p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-heading font-bold text-dark">
+                              {trip.users?.full_name ?? "Cliente"}
+                            </p>
+                            <p className="mt-1 text-xs text-contrast">
+                              Finalizada em{" "}
+                              {formatDateTime(
+                                trip.finished_at ?? trip.scheduled_datetime,
+                              )}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-success/10 px-3 py-1 text-sm font-heading font-bold text-success">
+                            {formatCurrency(price)}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-1 gap-2 text-xs md:grid-cols-2">
+                          <p className="text-contrast">
+                            Origem:{" "}
+                            <span className="text-dark">
+                              {trip.pickup_address?.formatted_address ?? "—"}
+                            </span>
+                          </p>
+                          <p className="text-contrast">
+                            Destino:{" "}
+                            <span className="text-dark">
+                              {trip.dropoff_address?.formatted_address ?? "—"}
+                            </span>
+                          </p>
+                          <p className="text-contrast">
+                            Passageiros:{" "}
+                            <span className="text-dark">
+                              {trip.passenger_count}
+                            </span>
+                          </p>
+                          <p className="text-contrast">
+                            Pagamento:{" "}
+                            <span className="text-dark">
+                              {trip.payment_method ?? "—"}
+                            </span>
+                          </p>
+                        </div>
+
+                        <div className="mt-4 border-t border-border pt-3">
+                          {tripRatings.length === 0 ? (
+                            <p className="text-xs text-contrast">
+                              Sem avaliações registradas nessa corrida.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {tripRatings.map((rating) => (
+                                <div
+                                  key={rating.id}
+                                  className="rounded-lg border border-border bg-background px-3 py-2"
+                                >
+                                  <p className="text-xs font-heading font-bold text-dark">
+                                    Nota {Number(rating.rating).toFixed(1)}
+                                    <span className="ml-2 font-body font-normal text-contrast">
+                                      {rating.rater?.full_name ?? "Usuário"}{" "}
+                                      avaliou{" "}
+                                      {rating.rated?.full_name ?? "usuário"}
+                                    </span>
+                                  </p>
+                                  {rating.comment && (
+                                    <p className="mt-1 text-sm text-dark">
+                                      {rating.comment}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

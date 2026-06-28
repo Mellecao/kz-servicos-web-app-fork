@@ -1,4 +1,9 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  buildFcmMessage,
+  isAuthorizedWebhook,
+  isInvalidFcmTokenError,
+  summarizeDispatchResults,
+} from './push-message.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -6,16 +11,19 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 interface NewRecord {
   id: string;
-  status: string;
-  client_id: string;
+  status?: string;
+  client_id?: string;
   driver_profile_id?: string | null;
   provider_profile_id?: string | null;
   pickup_address_id?: string | null;
   dropoff_address_id?: string | null;
+  chat_room_id?: string | null;
+  sender_id?: string | null;
+  message?: string | null;
 }
 
 interface RequestPayload {
-  table: 'trips' | 'service_requests' | 'trip_driver_candidates';
+  table: 'trips' | 'service_requests' | 'trip_driver_candidates' | 'chat_messages';
   event: string;
   old_status?: string;
   new_record: NewRecord;
@@ -24,6 +32,8 @@ interface RequestPayload {
 interface PushTarget {
   token: string;
   role: 'client' | 'driver' | 'provider';
+  userId?: string;
+  driverProfileId?: string;
 }
 
 interface NotificationSpec {
@@ -34,6 +44,132 @@ interface NotificationSpec {
   persistent: boolean;
   tripId?: string;
   serviceRequestId?: string;
+  chatRoomId?: string;
+  senderName?: string;
+  messagePreview?: string;
+}
+
+interface QueryResult<T> {
+  data: T | null;
+  error: string | null;
+}
+
+class SupabaseRestClient {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly serviceKey: string,
+  ) {}
+
+  from(table: string) {
+    return new SupabaseTableQuery(this.baseUrl, this.serviceKey, table);
+  }
+}
+
+class SupabaseTableQuery {
+  private filters: Array<[string, string]> = [];
+  private selectedColumns = '*';
+  private updateValues: Record<string, unknown> | null = null;
+
+  constructor(
+    private readonly baseUrl: string,
+    private readonly serviceKey: string,
+    private readonly table: string,
+  ) {}
+
+  select(columns: string) {
+    this.selectedColumns = columns;
+    return this;
+  }
+
+  eq(column: string, value: string) {
+    this.filters.push([column, `eq.${value}`]);
+    return this;
+  }
+
+  async single<T = Record<string, unknown>>(): Promise<QueryResult<T>> {
+    const url = new URL(`${this.baseUrl}/rest/v1/${this.table}`);
+    url.searchParams.set('select', this.selectedColumns);
+    for (const [key, value] of this.filters) {
+      url.searchParams.set(key, value);
+    }
+
+    const res = await fetch(url, {
+      headers: this._headers(),
+    });
+
+    if (!res.ok) {
+      return { data: null, error: await res.text() };
+    }
+
+    const rows = (await res.json()) as T[];
+    return { data: rows[0] ?? null, error: null };
+  }
+
+  async list<T = Record<string, unknown>>(): Promise<QueryResult<T[]>> {
+    const url = new URL(`${this.baseUrl}/rest/v1/${this.table}`);
+    url.searchParams.set('select', this.selectedColumns);
+    for (const [key, value] of this.filters) {
+      url.searchParams.set(key, value);
+    }
+
+    const res = await fetch(url, {
+      headers: this._headers(),
+    });
+
+    if (!res.ok) {
+      return { data: null, error: await res.text() };
+    }
+
+    const rows = (await res.json()) as T[];
+    return { data: rows, error: null };
+  }
+
+  update(values: Record<string, unknown>) {
+    this.updateValues = values;
+    return this;
+  }
+
+  then<TResult1 = QueryResult<Record<string, unknown>>, TResult2 = never>(
+    onfulfilled?: ((value: QueryResult<Record<string, unknown>>) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this._executeUpdate().then(onfulfilled, onrejected);
+  }
+
+  private async _executeUpdate(): Promise<QueryResult<Record<string, unknown>>> {
+    if (!this.updateValues) {
+      return { data: null, error: 'No update payload provided' };
+    }
+
+    const url = new URL(`${this.baseUrl}/rest/v1/${this.table}`);
+    for (const [key, value] of this.filters) {
+      url.searchParams.set(key, value);
+    }
+
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        ...this._headers(),
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(this.updateValues),
+    });
+
+    if (!res.ok) {
+      return { data: null, error: await res.text() };
+    }
+
+    const rows = (await res.json()) as Record<string, unknown>[];
+    return { data: rows[0] ?? null, error: null };
+  }
+
+  private _headers() {
+    return {
+      apikey: this.serviceKey,
+      Authorization: `Bearer ${this.serviceKey}`,
+      'Content-Type': 'application/json',
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -116,29 +252,14 @@ async function sendFCMMessage(
   title: string,
   body: string,
   dataPayload: Record<string, string>,
-  persistent: boolean
-): Promise<{ ok: boolean; error?: string }> {
-  // deno-lint-ignore no-explicit-any
-  const message: Record<string, any> = {
+): Promise<{ ok: boolean; invalidToken?: boolean; error?: string }> {
+  const message = buildFcmMessage({
     token,
+    title,
+    body,
     data: dataPayload,
-    android: {
-      priority: 'high',
-      notification: {
-        channel_id: 'trip_notifications',
-        priority: 'high',
-      },
-    },
-  };
-
-  if (!persistent) {
-    // Non-persistent: include notification block so the OS shows it automatically
-    message.notification = { title, body };
-  } else {
-    // Persistent (trip_request / recheck): data-only, app handles display
-    // Remove android.notification to avoid OS auto-display
-    message.android = { priority: 'high' };
-  }
+    persistent: dataPayload.persistent === 'true',
+  });
 
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -155,9 +276,8 @@ async function sendFCMMessage(
   if (res.ok) return { ok: true };
 
   const errBody = await res.text();
-  // 404 / UNREGISTERED tokens are expected — treat as soft error
-  if (res.status === 404 || errBody.includes('UNREGISTERED')) {
-    return { ok: false, error: `token_invalid:${token.slice(0, 20)}` };
+  if (isInvalidFcmTokenError(res.status, errBody)) {
+    return { ok: false, invalidToken: true, error: 'token_invalid' };
   }
   return { ok: false, error: `fcm_error:${res.status}:${errBody.slice(0, 200)}` };
 }
@@ -167,84 +287,151 @@ async function sendFCMMessage(
 // ---------------------------------------------------------------------------
 
 async function getClientToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseRestClient,
   clientId: string
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('users')
     .select('fcm_token')
     .eq('id', clientId)
-    .single();
+    .single<{ fcm_token?: string }>();
 
   if (error || !data?.fcm_token) return null;
   return data.fcm_token;
 }
 
-async function getDriverTokens(
-  supabase: ReturnType<typeof createClient>,
-  driverProfileId: string
-): Promise<string[]> {
-  // driver_profiles has its own fcm_token, and also links to provider_profiles -> users
-  const tokens: string[] = [];
+async function getUserPushTarget(
+  supabase: SupabaseRestClient,
+  userId: string,
+  role: PushTarget['role'],
+): Promise<PushTarget | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('fcm_token')
+    .eq('id', userId)
+    .single<{ fcm_token?: string }>();
 
-  // 1. Direct fcm_token on driver_profiles
+  if (error || !data?.fcm_token) return null;
+  return { token: data.fcm_token, role, userId };
+}
+
+async function getUserName(
+  supabase: SupabaseRestClient,
+  userId?: string | null,
+): Promise<string> {
+  if (!userId) return 'KZ';
+  const { data } = await supabase
+    .from('users')
+    .select('full_name')
+    .eq('id', userId)
+    .single<{ full_name?: string }>();
+
+  return data?.full_name ?? 'KZ';
+}
+
+async function getDriverTargets(
+  supabase: SupabaseRestClient,
+  driverProfileId: string
+): Promise<PushTarget[]> {
+  const targetMap = new Map<string, PushTarget>();
+  const upsert = (target: PushTarget) => {
+    const existing = targetMap.get(target.token);
+    if (!existing) {
+      targetMap.set(target.token, target);
+      return;
+    }
+
+    targetMap.set(target.token, {
+      ...existing,
+      userId: existing.userId ?? target.userId,
+      driverProfileId: existing.driverProfileId ?? target.driverProfileId,
+    });
+  };
+
   const { data: dp } = await supabase
     .from('driver_profiles')
     .select('fcm_token, provider_profile_id')
     .eq('id', driverProfileId)
-    .single();
+    .single<{ fcm_token?: string; provider_profile_id?: string | null }>();
 
-  if (dp?.fcm_token) tokens.push(dp.fcm_token);
+  if (dp?.fcm_token) {
+    upsert({
+      token: dp.fcm_token,
+      role: 'driver',
+      driverProfileId,
+    });
+  }
 
-  // 2. fcm_token via provider_profiles -> users
   if (dp?.provider_profile_id) {
     const { data: pp } = await supabase
       .from('provider_profiles')
       .select('user_id')
       .eq('id', dp.provider_profile_id)
-      .single();
+      .single<{ user_id?: string | null }>();
 
     if (pp?.user_id) {
       const { data: user } = await supabase
         .from('users')
         .select('fcm_token')
         .eq('id', pp.user_id)
-        .single();
+        .single<{ fcm_token?: string }>();
 
       if (user?.fcm_token && user.fcm_token !== dp.fcm_token) {
-        tokens.push(user.fcm_token);
+        upsert({
+          token: user.fcm_token,
+          role: 'driver',
+          userId: pp.user_id,
+        });
       }
     }
   }
 
-  return tokens.filter(Boolean);
+  return [...targetMap.values()];
 }
 
-async function getPendingCandidateTokens(
-  supabase: ReturnType<typeof createClient>,
+async function getPendingCandidateTargets(
+  supabase: SupabaseRestClient,
   tripId: string
-): Promise<string[]> {
+): Promise<PushTarget[]> {
   // Get all driver candidates with status=pending for this trip
   const { data: candidates, error } = await supabase
     .from('trip_driver_candidates')
     .select('driver_profile_id')
     .eq('trip_id', tripId)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .list<{ driver_profile_id?: string | null }>();
 
   if (error || !candidates?.length) return [];
 
-  const tokens: string[] = [];
+  const targets: PushTarget[] = [];
 
   for (const candidate of candidates) {
-    const driverTokens = await getDriverTokens(supabase, candidate.driver_profile_id);
-    tokens.push(...driverTokens);
+    const driverTargets = await getDriverTargets(
+      supabase,
+      candidate.driver_profile_id as string,
+    );
+    targets.push(...driverTargets);
   }
 
-  return [...new Set(tokens)]; // deduplicate
+  const targetMap = new Map<string, PushTarget>();
+  for (const target of targets) {
+    const existing = targetMap.get(target.token);
+    if (!existing) {
+      targetMap.set(target.token, target);
+      continue;
+    }
+    targetMap.set(target.token, {
+      ...existing,
+      userId: existing.userId ?? target.userId,
+      driverProfileId: existing.driverProfileId ?? target.driverProfileId,
+    });
+  }
+
+  return [...targetMap.values()];
 }
 
 async function getAddressText(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseRestClient,
   addressId: string | null | undefined
 ): Promise<string> {
   if (!addressId) return 'endereço desconhecido';
@@ -253,21 +440,21 @@ async function getAddressText(
     .from('addresses')
     .select('formatted_address')
     .eq('id', addressId)
-    .single();
+    .single<{ formatted_address?: string }>();
 
   if (error || !data?.formatted_address) return 'endereço desconhecido';
   return data.formatted_address;
 }
 
 async function getClientName(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseRestClient,
   clientId: string
 ): Promise<string> {
   const { data } = await supabase
     .from('users')
     .select('full_name')
     .eq('id', clientId)
-    .single();
+    .single<{ full_name?: string }>();
 
   return data?.full_name ?? 'Passageiro';
 }
@@ -277,23 +464,25 @@ async function getClientName(
 // ---------------------------------------------------------------------------
 
 async function resolveTripsNotification(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseRestClient,
   record: NewRecord
 ): Promise<NotificationSpec | null> {
   const status = record.status;
   const tripId = record.id;
+  const clientId = record.client_id;
 
   switch (status) {
     case 'searching_drivers': {
-      const tokens = await getPendingCandidateTokens(supabase, tripId);
-      if (!tokens.length) return null;
+      if (!clientId) return null;
+      const targets = await getPendingCandidateTargets(supabase, tripId);
+      if (!targets.length) return null;
 
-      const clientName = await getClientName(supabase, record.client_id);
+      const clientName = await getClientName(supabase, clientId);
       const pickup = await getAddressText(supabase, record.pickup_address_id);
       const dropoff = await getAddressText(supabase, record.dropoff_address_id);
 
       return {
-        targets: tokens.map((t) => ({ token: t, role: 'driver' })),
+        targets,
         title: 'Nova corrida disponível!',
         body: `${clientName} solicitou uma corrida de ${pickup} para ${dropoff}.`,
         dataType: 'trip_request',
@@ -303,10 +492,11 @@ async function resolveTripsNotification(
     }
 
     case 'awaiting_client_confirmation': {
-      const token = await getClientToken(supabase, record.client_id);
+      if (!clientId) return null;
+      const token = await getClientToken(supabase, clientId);
       if (!token) return null;
       return {
-        targets: [{ token, role: 'client' }],
+        targets: [{ token, role: 'client', userId: clientId }],
         title: 'Motorista encontrado!',
         body: 'Um motorista aceitou sua viagem. Confirme agora no app.',
         dataType: 'awaiting_confirmation',
@@ -316,14 +506,14 @@ async function resolveTripsNotification(
     }
 
     case 'awaiting_driver_confirmation': {
-      if (!record.driver_profile_id) return null;
-      const tokens = await getDriverTokens(supabase, record.driver_profile_id);
-      if (!tokens.length) return null;
+      if (!record.driver_profile_id || !clientId) return null;
+      const targets = await getDriverTargets(supabase, record.driver_profile_id);
+      if (!targets.length) return null;
 
-      const clientName = await getClientName(supabase, record.client_id);
+      const clientName = await getClientName(supabase, clientId);
 
       return {
-        targets: tokens.map((t) => ({ token: t, role: 'driver' })),
+        targets,
         title: 'Passageiro confirmou!',
         body: `${clientName} confirmou a corrida. Toque para confirmar sua participação.`,
         dataType: 'recheck',
@@ -334,12 +524,13 @@ async function resolveTripsNotification(
 
     case 'scheduled': {
       const notifications: NotificationSpec[] = [];
+      if (!clientId) return null;
 
       // Client
-      const clientToken = await getClientToken(supabase, record.client_id);
+      const clientToken = await getClientToken(supabase, clientId);
       if (clientToken) {
         notifications.push({
-          targets: [{ token: clientToken, role: 'client' }],
+          targets: [{ token: clientToken, role: 'client', userId: clientId }],
           title: 'Viagem confirmada!',
           body: 'Sua viagem está confirmada.',
           dataType: 'trip_scheduled',
@@ -350,10 +541,10 @@ async function resolveTripsNotification(
 
       // Driver
       if (record.driver_profile_id) {
-        const driverTokens = await getDriverTokens(supabase, record.driver_profile_id);
-        if (driverTokens.length) {
+        const driverTargets = await getDriverTargets(supabase, record.driver_profile_id);
+        if (driverTargets.length) {
           notifications.push({
-            targets: driverTokens.map((t) => ({ token: t, role: 'driver' })),
+            targets: driverTargets,
             title: 'Viagem agendada!',
             body: 'A viagem foi confirmada e agendada.',
             dataType: 'trip_scheduled_driver',
@@ -375,10 +566,11 @@ async function resolveTripsNotification(
     }
 
     case 'started': {
-      const token = await getClientToken(supabase, record.client_id);
+      if (!clientId) return null;
+      const token = await getClientToken(supabase, clientId);
       if (!token) return null;
       return {
-        targets: [{ token, role: 'client' }],
+        targets: [{ token, role: 'client', userId: clientId }],
         title: 'Viagem iniciada!',
         body: 'Seu motorista iniciou a viagem.',
         dataType: 'trip_started',
@@ -390,10 +582,10 @@ async function resolveTripsNotification(
     case 'finished': {
       const specs: NotificationSpec[] = [];
 
-      const clientToken = await getClientToken(supabase, record.client_id);
+      const clientToken = clientId ? await getClientToken(supabase, clientId) : null;
       if (clientToken) {
         specs.push({
-          targets: [{ token: clientToken, role: 'client' }],
+          targets: [{ token: clientToken, role: 'client', userId: clientId }],
           title: 'Viagem concluída!',
           body: 'Sua viagem foi concluída com sucesso. Avalie sua experiência!',
           dataType: 'trip_finished',
@@ -403,10 +595,10 @@ async function resolveTripsNotification(
       }
 
       if (record.driver_profile_id) {
-        const driverTokens = await getDriverTokens(supabase, record.driver_profile_id);
-        if (driverTokens.length) {
+        const driverTargets = await getDriverTargets(supabase, record.driver_profile_id);
+        if (driverTargets.length) {
           specs.push({
-            targets: driverTokens.map((t) => ({ token: t, role: 'driver' })),
+            targets: driverTargets,
             title: 'Corrida concluída!',
             body: 'Corrida finalizada com sucesso.',
             dataType: 'trip_finished_driver',
@@ -425,10 +617,10 @@ async function resolveTripsNotification(
     case 'cancelled': {
       const specs: NotificationSpec[] = [];
 
-      const clientToken = await getClientToken(supabase, record.client_id);
+      const clientToken = clientId ? await getClientToken(supabase, clientId) : null;
       if (clientToken) {
         specs.push({
-          targets: [{ token: clientToken, role: 'client' }],
+          targets: [{ token: clientToken, role: 'client', userId: clientId }],
           title: 'Viagem cancelada',
           body: 'Sua viagem foi cancelada.',
           dataType: 'trip_cancelled',
@@ -438,10 +630,10 @@ async function resolveTripsNotification(
       }
 
       if (record.driver_profile_id) {
-        const driverTokens = await getDriverTokens(supabase, record.driver_profile_id);
-        if (driverTokens.length) {
+        const driverTargets = await getDriverTargets(supabase, record.driver_profile_id);
+        if (driverTargets.length) {
           specs.push({
-            targets: driverTokens.map((t) => ({ token: t, role: 'driver' })),
+            targets: driverTargets,
             title: 'Corrida cancelada',
             body: 'A corrida foi cancelada.',
             dataType: 'trip_cancelled_driver',
@@ -458,10 +650,11 @@ async function resolveTripsNotification(
     }
 
     case 'review_rejected': {
-      const token = await getClientToken(supabase, record.client_id);
+      if (!clientId) return null;
+      const token = await getClientToken(supabase, clientId);
       if (!token) return null;
       return {
-        targets: [{ token, role: 'client' }],
+        targets: [{ token, role: 'client', userId: clientId }],
         title: 'Solicitação recusada',
         body: 'Sua solicitação de viagem foi recusada.',
         dataType: 'trip_rejected',
@@ -471,10 +664,11 @@ async function resolveTripsNotification(
     }
 
     case 'under_review': {
-      const token = await getClientToken(supabase, record.client_id);
+      if (!clientId) return null;
+      const token = await getClientToken(supabase, clientId);
       if (!token) return null;
       return {
-        targets: [{ token, role: 'client' }],
+        targets: [{ token, role: 'client', userId: clientId }],
         title: 'Solicitação recebida',
         body: 'Sua viagem está em análise pela equipe KZ.',
         dataType: 'trip_under_review',
@@ -489,20 +683,20 @@ async function resolveTripsNotification(
 }
 
 async function resolveCandidateInsertNotification(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseRestClient,
   record: NewRecord
 ): Promise<NotificationSpec | null> {
-  if (!record.driver_profile_id) return null;
+  if (!record.driver_profile_id || !record.client_id) return null;
 
-  const tokens = await getDriverTokens(supabase, record.driver_profile_id);
-  if (!tokens.length) return null;
+  const targets = await getDriverTargets(supabase, record.driver_profile_id);
+  if (!targets.length) return null;
 
   const clientName = await getClientName(supabase, record.client_id);
   const pickup = await getAddressText(supabase, record.pickup_address_id);
   const dropoff = await getAddressText(supabase, record.dropoff_address_id);
 
   return {
-    targets: tokens.map((t) => ({ token: t, role: 'driver' })),
+    targets,
     title: 'Nova corrida disponível!',
     body: `${clientName} solicitou uma corrida de ${pickup} para ${dropoff}.`,
     dataType: 'trip_request',
@@ -512,11 +706,13 @@ async function resolveCandidateInsertNotification(
 }
 
 async function resolveServiceRequestNotification(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseRestClient,
   record: NewRecord
 ): Promise<NotificationSpec | null> {
   const status = record.status;
   const serviceRequestId = record.id;
+  const clientId = record.client_id;
+  if (!clientId) return null;
 
   let title: string;
   let body: string;
@@ -547,16 +743,55 @@ async function resolveServiceRequestNotification(
       return null;
   }
 
-  const token = await getClientToken(supabase, record.client_id);
+  const token = await getClientToken(supabase, clientId);
   if (!token) return null;
 
   return {
-    targets: [{ token, role: 'client' }],
+    targets: [{ token, role: 'client', userId: clientId }],
     title,
     body,
     dataType,
     persistent: false,
     serviceRequestId,
+  };
+}
+
+async function resolveChatMessageNotification(
+  supabase: SupabaseRestClient,
+  record: NewRecord
+): Promise<NotificationSpec | null> {
+  if (!record.chat_room_id || !record.sender_id) return null;
+
+  const { data: room } = await supabase
+    .from('chat_rooms')
+    .select('id, provider_id, client_id')
+    .eq('id', record.chat_room_id)
+    .single<{ id: string; provider_id?: string | null; client_id?: string | null }>();
+
+  const providerId = room?.provider_id;
+  if (!providerId || providerId === record.sender_id) return null;
+
+  const target = await getUserPushTarget(supabase, providerId, 'provider');
+  if (!target) return null;
+
+  const senderName =
+    record.sender_id === room?.client_id
+      ? await getClientName(supabase, room.client_id)
+      : await getUserName(supabase, record.sender_id);
+  const cleanMessage = (record.message ?? '').replace(/\s+/g, ' ').trim();
+  const preview = cleanMessage.length > 120
+    ? `${cleanMessage.slice(0, 117)}...`
+    : cleanMessage || 'Nova mensagem recebida.';
+
+  return {
+    targets: [target],
+    title: `Nova mensagem de ${senderName}`,
+    body: preview,
+    dataType: 'chat_message',
+    persistent: false,
+    chatRoomId: record.chat_room_id,
+    senderName,
+    messagePreview: preview,
   };
 }
 
@@ -567,20 +802,29 @@ async function resolveServiceRequestNotification(
 async function dispatchSpecs(
   specs: NotificationSpec[],
   accessToken: string,
-  projectId: string
-): Promise<{ sent: number; errors: number }> {
+  projectId: string,
+  supabase: SupabaseRestClient
+): Promise<{ sent: number; invalid: number; errors: number }> {
   let sent = 0;
+  let invalid = 0;
   let errors = 0;
+  const results: { ok: boolean; invalidToken?: boolean; error?: string }[] = [];
 
   for (const spec of specs) {
-    const entityId = spec.tripId ?? spec.serviceRequestId ?? '';
-    const entityKey = spec.tripId ? 'trip_id' : 'service_request_id';
+    const entityId = spec.tripId ?? spec.serviceRequestId ?? spec.chatRoomId ?? '';
+    const entityKey = spec.tripId
+      ? 'trip_id'
+      : spec.serviceRequestId
+      ? 'service_request_id'
+      : 'room_id';
 
     const dataPayload: Record<string, string> = {
       type: spec.dataType,
       [entityKey]: entityId,
       persistent: spec.persistent ? 'true' : 'false',
     };
+    if (spec.senderName) dataPayload.sender_name = spec.senderName;
+    if (spec.messagePreview) dataPayload.message = spec.messagePreview;
 
     for (const target of spec.targets) {
       const result = await sendFCMMessage(
@@ -590,19 +834,42 @@ async function dispatchSpecs(
         spec.title,
         spec.body,
         dataPayload,
-        spec.persistent
       );
 
       if (result.ok) {
         sent++;
+        results.push(result);
+      } else if (result.invalidToken) {
+        invalid++;
+        results.push(result);
+        if (target.driverProfileId) {
+          await supabase
+            .from('driver_profiles')
+            .update({ fcm_token: null, fcm_token_updated_at: null })
+            .eq('id', target.driverProfileId)
+            .eq('fcm_token', target.token);
+        }
+        if (target.userId) {
+          await supabase
+            .from('users')
+            .update({ fcm_token: null, fcm_token_updated_at: null })
+            .eq('id', target.userId)
+            .eq('fcm_token', target.token);
+        }
       } else {
         console.error(`FCM send failed for token ${target.token.slice(0, 20)}: ${result.error}`);
         errors++;
+        results.push(result);
       }
     }
   }
 
-  return { sent, errors };
+  const summary = summarizeDispatchResults(results);
+  return {
+    sent: summary.sent || sent,
+    invalid: summary.invalid || invalid,
+    errors: summary.errors || errors,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -619,11 +886,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // Authorization check
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const authHeader = req.headers.get('Authorization') ?? '';
-  const expectedBearer = `Bearer ${serviceRoleKey}`;
+  const expectedWebhookSecret = Deno.env.get('PUSH_WEBHOOK_SECRET') ?? '';
+  const providedWebhookSecret = req.headers.get('X-Push-Webhook-Secret') ?? '';
 
-  if (!serviceRoleKey || authHeader !== expectedBearer) {
+  if (!isAuthorizedWebhook(providedWebhookSecret, expectedWebhookSecret)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -643,8 +909,14 @@ Deno.serve(async (req: Request) => {
 
   const { table, new_record } = payload;
 
-  if (!table || !new_record?.id || !new_record?.status) {
+  if (!table || !new_record?.id) {
     return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (table !== 'chat_messages' && !new_record.status) {
+    return new Response(JSON.stringify({ error: 'Missing status field' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -655,8 +927,9 @@ Deno.serve(async (req: Request) => {
   const firebaseProjectId = Deno.env.get('FIREBASE_PROJECT_ID') ?? '';
   const firebaseClientEmail = Deno.env.get('FIREBASE_CLIENT_EMAIL') ?? '';
   const firebasePrivateKey = (Deno.env.get('FIREBASE_PRIVATE_KEY') ?? '').replace(/\\n/g, '\n');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-  if (!supabaseUrl || !firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
+  if (!supabaseUrl || !firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey || !serviceRoleKey) {
     return new Response(JSON.stringify({ error: 'Missing environment variables' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
@@ -664,9 +937,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // Supabase client (service role)
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
+  const supabase = new SupabaseRestClient(supabaseUrl, serviceRoleKey);
 
   // Resolve notification spec(s)
   let specsToSend: NotificationSpec[] = [];
@@ -680,6 +951,8 @@ Deno.serve(async (req: Request) => {
       resolved = await resolveServiceRequestNotification(supabase, new_record);
     } else if (table === 'trip_driver_candidates') {
       resolved = await resolveCandidateInsertNotification(supabase, new_record);
+    } else if (table === 'chat_messages') {
+      resolved = await resolveChatMessageNotification(supabase, new_record);
     }
 
     if (!resolved) {
@@ -716,9 +989,14 @@ Deno.serve(async (req: Request) => {
   }
 
   // Dispatch
-  const { sent, errors } = await dispatchSpecs(specsToSend, accessToken, firebaseProjectId);
+  const { sent, invalid, errors } = await dispatchSpecs(
+    specsToSend,
+    accessToken,
+    firebaseProjectId,
+    supabase,
+  );
 
-  return new Response(JSON.stringify({ sent, errors }), {
+  return new Response(JSON.stringify({ sent, invalid, errors }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
