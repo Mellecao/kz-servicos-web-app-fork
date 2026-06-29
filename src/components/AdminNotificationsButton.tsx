@@ -95,7 +95,7 @@ export default function AdminNotificationsButton() {
   if (loading || userProfile?.role !== "admin") return null;
 
   return (
-    <div className="fixed right-4 top-4 z-40 md:right-8 md:top-6">
+    <div className="fixed bottom-20 right-4 z-40 md:bottom-8 md:right-8">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -124,7 +124,7 @@ export default function AdminNotificationsButton() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-3 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background shadow-xl">
+        <div className="absolute bottom-full right-0 mb-3 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background shadow-xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-heading font-bold text-dark">
               Notificações
