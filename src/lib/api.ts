@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { isMissingPostgrestRelationError } from "@/lib/postgrest-errors";
+import { buildDriverMetrics, getDriverMetricPeriodRange } from "@/lib/driver-metrics";
+import { isProviderWithoutDriverProfile } from "@/lib/provider-filters";
 import type {
   User,
   Trip,
@@ -20,6 +22,9 @@ import type {
   AdminLog,
   Rating,
   DriverTripHistoryEntry,
+  DriverMetricPeriod,
+  DriverMetrics,
+  Notification,
 } from "@/types/database";
 
 // ─── Admin Logs ────────────────────────────────────────────
@@ -43,6 +48,25 @@ export async function fetchAdminLogs(): Promise<AdminLog[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as AdminLog[];
+}
+
+// ─── Notifications ────────────────────────────────────────
+export async function fetchAdminNotifications(): Promise<Notification[]> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []) as Notification[];
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // ─── Auth ──────────────────────────────────────────────────
@@ -617,10 +641,23 @@ export async function fetchVehiclesByDriver(
 ): Promise<Vehicle[]> {
   const { data, error } = await supabase
     .from("vehicles")
-    .select("*")
+    .select("*, vehicle_photos(*)")
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
   return data as Vehicle[];
+}
+
+export async function deleteDriverProfilePhoto(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("driver_profile_photos")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteVehiclePhoto(id: string): Promise<void> {
+  const { error } = await supabase.from("vehicle_photos").delete().eq("id", id);
+  if (error) throw error;
 }
 
 // ─── Ratings ───────────────────────────────────────────────
@@ -679,6 +716,83 @@ export async function fetchDriverTripHistory(
   }));
 }
 
+export async function fetchDriverPerformance(
+  driverProfileId: string,
+  driverUserId: string,
+  period: DriverMetricPeriod,
+): Promise<{ metrics: DriverMetrics; history: DriverTripHistoryEntry[] }> {
+  const range = getDriverMetricPeriodRange(period);
+  const rangeStart = range.start.toISOString();
+
+  const [tripsResult, candidatesResult, ratingsResult] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(
+        "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+      )
+      .eq("driver_profile_id", driverProfileId)
+      .gte("updated_at", rangeStart)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("trip_driver_candidates")
+      .select("id, trip_id, driver_profile_id, status, responded_at, created_at")
+      .eq("driver_profile_id", driverProfileId)
+      .gte("created_at", rangeStart),
+    supabase
+      .from("ratings")
+      .select(
+        "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+      )
+      .eq("rated_id", driverUserId)
+      .gte("created_at", rangeStart)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (tripsResult.error) throw tripsResult.error;
+  if (candidatesResult.error) throw candidatesResult.error;
+  if (ratingsResult.error) throw ratingsResult.error;
+
+  const tripRows = (tripsResult.data ?? []) as Trip[];
+  const ratings = (ratingsResult.data ?? []) as Rating[];
+  const metrics = buildDriverMetrics({
+    driverProfileId,
+    driverUserId,
+    range,
+    trips: tripRows,
+    candidates: (candidatesResult.data ?? []) as Array<{
+      id: string;
+      trip_id: string;
+      driver_profile_id: string;
+      status: string;
+      responded_at: string | null;
+      created_at: string;
+    }>,
+    ratings: ratings.map((rating) => ({
+      id: rating.id,
+      rated_id: rating.rated_id,
+      rating: Number(rating.rating),
+      created_at: rating.created_at,
+    })),
+  });
+
+  const ratingsByTrip = new Map<string, Rating[]>();
+  for (const rating of ratings) {
+    if (!rating.trip_id) continue;
+    ratingsByTrip.set(rating.trip_id, [
+      ...(ratingsByTrip.get(rating.trip_id) ?? []),
+      rating,
+    ]);
+  }
+
+  return {
+    metrics,
+    history: tripRows.map((trip) => ({
+      trip,
+      ratings: ratingsByTrip.get(trip.id) ?? [],
+    })),
+  };
+}
+
 export function isPublicRating(rating: Pick<Rating, "rating">): boolean {
   return Number(rating.rating) >= 4;
 }
@@ -687,9 +801,15 @@ export function isPublicRating(rating: Pick<Rating, "rating">): boolean {
 export async function fetchProviderProfiles(): Promise<ProviderProfile[]> {
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select("*, users(*), service_categories(*)");
+    .select("*, users(*), service_categories(*), driver_profiles(id)");
   if (error) throw error;
-  return data as ProviderProfile[];
+  return ((data ?? []) as (ProviderProfile & { driver_profiles?: unknown })[])
+    .filter(isProviderWithoutDriverProfile)
+    .map((provider) => {
+      const cleanProvider = { ...provider };
+      delete cleanProvider.driver_profiles;
+      return cleanProvider;
+    });
 }
 
 // ─── Dashboard Stats ───────────────────────────────────────

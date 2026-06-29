@@ -1,6 +1,8 @@
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import MobileNav from "@/components/MobileNav";
+import OneSignalInitializer from "@/components/OneSignalInitializer";
+import AdminNotificationsButton from "@/components/AdminNotificationsButton";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/Toast";
 
@@ -12,6 +14,8 @@ export default function DashboardLayout({
   return (
     <AuthProvider>
       <ToastProvider>
+        <OneSignalInitializer />
+        <AdminNotificationsButton />
         <div className="min-h-screen bg-background">
           <MobileHeader />
           <Sidebar />

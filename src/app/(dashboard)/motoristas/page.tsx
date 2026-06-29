@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   deleteUserById,
-  fetchDriverTripHistory,
+  deleteDriverProfilePhoto,
+  deleteVehiclePhoto,
+  fetchDriverPerformance,
   fetchDriverProfiles,
   fetchRatingsForUser,
   fetchVehiclesByDriver,
@@ -15,7 +17,10 @@ import type {
   DriverTripHistoryEntry,
   Rating,
   Vehicle,
+  VehiclePhoto,
   ProviderStatus,
+  DriverMetricPeriod,
+  DriverMetrics,
 } from "@/types/database";
 import NovoMotoristaForm from "@/components/forms/NovoMotoristaForm";
 
@@ -71,6 +76,63 @@ interface DriverWithVehicle extends DriverProfile {
   vehicle?: Vehicle;
 }
 
+const emptyDriverMetrics: DriverMetrics = {
+  finishedTrips: 0,
+  cancelledTrips: 0,
+  refusedTrips: 0,
+  averageRating: 0,
+};
+
+const metricPeriodLabels: Record<DriverMetricPeriod, string> = {
+  today: "Hoje",
+  week: "Semana",
+  month: "Mês",
+  year: "Ano",
+};
+
+function DriverAvatar({
+  name,
+  avatarUrl,
+  size = "md",
+  onClick,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  size?: "sm" | "md" | "lg";
+  onClick?: () => void;
+}) {
+  const sizeClass =
+    size === "lg" ? "h-20 w-20 text-2xl" : size === "sm" ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
+  const content = avatarUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={avatarUrl}
+      alt={`Foto de perfil de ${name}`}
+      className={`${sizeClass} rounded-full object-cover border border-border bg-background`}
+    />
+  ) : (
+    <span
+      className={`${sizeClass} rounded-full bg-primary/10 flex items-center justify-center font-semibold text-primary`}
+    >
+      {getInitials(name)}
+    </span>
+  );
+
+  if (!onClick) return content;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary"
+      aria-label={`Abrir preview do perfil de ${name}`}
+      title="Preview do perfil"
+    >
+      {content}
+    </button>
+  );
+}
+
 function DriverPublicPhotos({ driver }: { driver: DriverWithVehicle }) {
   const photos = [...(driver.driver_profile_photos ?? [])]
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -100,6 +162,76 @@ function DriverPublicPhotos({ driver }: { driver: DriverWithVehicle }) {
   );
 }
 
+function PreviewPhotoGrid({
+  title,
+  photos,
+  emptyText,
+  deletingPhotoId,
+  onOpen,
+  onDelete,
+}: {
+  title: string;
+  photos: Array<{ id: string; photo_url: string }>;
+  emptyText: string;
+  deletingPhotoId: string | null;
+  onOpen: (url: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-heading font-bold text-dark">{title}</h3>
+      {photos.length === 0 ? (
+        <p className="mt-2 text-xs text-contrast">{emptyText}</p>
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {photos.map((photo) => (
+            <div
+              key={photo.id}
+              className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-surface"
+            >
+              <button
+                type="button"
+                onClick={() => onOpen(photo.photo_url)}
+                className="h-full w-full"
+                aria-label="Abrir foto ampliada"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.photo_url}
+                  alt={title}
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(photo.id)}
+                disabled={deletingPhotoId === photo.id}
+                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-danger text-white shadow disabled:opacity-60"
+                aria-label="Remover foto"
+                title="Remover foto"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
+                  />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MotoristasPage() {
   const { toast } = useToast();
   const [drivers, setDrivers] = useState<DriverWithVehicle[]>([]);
@@ -121,6 +253,18 @@ export default function MotoristasPage() {
   );
   const [tripHistory, setTripHistory] = useState<DriverTripHistoryEntry[]>([]);
   const [tripHistoryLoading, setTripHistoryLoading] = useState(false);
+  const [historyDriver, setHistoryDriver] = useState<DriverWithVehicle | null>(
+    null,
+  );
+  const [historyPeriod, setHistoryPeriod] =
+    useState<DriverMetricPeriod>("month");
+  const [driverMetrics, setDriverMetrics] =
+    useState<DriverMetrics>(emptyDriverMetrics);
+  const [previewDriver, setPreviewDriver] = useState<DriverWithVehicle | null>(
+    null,
+  );
+  const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768
       ? "cards"
@@ -198,17 +342,98 @@ export default function MotoristasPage() {
     }
   }
 
+  const loadDriverPerformance = useCallback(
+    async (driver: DriverWithVehicle, period: DriverMetricPeriod) => {
+      const user = driver.provider_profiles?.users;
+      if (!user?.id) {
+        toast("danger", "Não foi possível localizar o usuário do motorista.");
+        return;
+      }
+
+      setTripHistoryLoading(true);
+      try {
+        const performance = await fetchDriverPerformance(
+          driver.id,
+          user.id,
+          period,
+        );
+        setTripHistory(performance.history);
+        setDriverMetrics(performance.metrics);
+      } catch {
+        toast("danger", "Erro ao carregar métricas do motorista.");
+      } finally {
+        setTripHistoryLoading(false);
+      }
+    },
+    [toast],
+  );
+
   async function handleOpenTripHistory(driver: DriverWithVehicle) {
     const name = driver.provider_profiles?.users?.full_name ?? "Motorista";
     setHistoryDriverName(name);
+    setHistoryDriver(driver);
+    setHistoryPeriod("month");
+    setDriverMetrics(emptyDriverMetrics);
     setTripHistory([]);
-    setTripHistoryLoading(true);
+    await loadDriverPerformance(driver, "month");
+  }
+
+  async function handleChangeHistoryPeriod(period: DriverMetricPeriod) {
+    if (!historyDriver) return;
+    setHistoryPeriod(period);
+    await loadDriverPerformance(historyDriver, period);
+  }
+
+  async function handleDeleteDriverPhoto(photoId: string) {
+    if (!window.confirm("Remover esta foto do perfil do motorista?")) return;
+    setDeletingPhotoId(photoId);
     try {
-      setTripHistory(await fetchDriverTripHistory(driver.id));
+      await deleteDriverProfilePhoto(photoId);
+      toast("success", "Foto removida com sucesso.");
+      setPreviewDriver((current) =>
+        current
+          ? {
+              ...current,
+              driver_profile_photos: current.driver_profile_photos?.filter(
+                (photo) => photo.id !== photoId,
+              ),
+            }
+          : current,
+      );
+      await loadDrivers();
     } catch {
-      toast("danger", "Erro ao carregar histórico de corridas.");
+      toast("danger", "Erro ao remover foto do motorista.");
     } finally {
-      setTripHistoryLoading(false);
+      setDeletingPhotoId(null);
+    }
+  }
+
+  async function handleDeleteVehiclePhoto(photoId: string) {
+    if (!window.confirm("Remover esta foto do veículo?")) return;
+    setDeletingPhotoId(photoId);
+    try {
+      await deleteVehiclePhoto(photoId);
+      toast("success", "Foto removida com sucesso.");
+      setPreviewDriver((current) =>
+        current
+          ? {
+              ...current,
+              vehicle: current.vehicle
+                ? {
+                    ...current.vehicle,
+                    vehicle_photos: current.vehicle.vehicle_photos?.filter(
+                      (photo) => photo.id !== photoId,
+                    ),
+                  }
+                : current.vehicle,
+            }
+          : current,
+      );
+      await loadDrivers();
+    } catch {
+      toast("danger", "Erro ao remover foto do veículo.");
+    } finally {
+      setDeletingPhotoId(null);
     }
   }
 
@@ -339,15 +564,13 @@ export default function MotoristasPage() {
                 key={driver.id}
                 className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary transition-colors"
               >
-                <button
-                  type="button"
-                  onClick={() => handleOpenTripHistory(driver)}
-                  className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0 hover:bg-primary-dark transition-colors cursor-pointer"
-                  aria-label={`Ver histórico de corridas de ${name}`}
-                  title="Histórico de corridas"
-                >
-                  {getInitials(name)}
-                </button>
+                <div className="flex-shrink-0">
+                  <DriverAvatar
+                    name={name}
+                    avatarUrl={driver.provider_profiles?.users?.avatar_url}
+                    onClick={() => setPreviewDriver(driver)}
+                  />
+                </div>
                 <div className="flex-1 min-w-0">
                   <button
                     type="button"
@@ -379,6 +602,28 @@ export default function MotoristasPage() {
                   title="Avaliações"
                 >
                   ★
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDriver(driver)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-dark hover:bg-surface-hover transition-colors"
+                  aria-label={`Preview do perfil de ${name}`}
+                  title="Preview do perfil"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
+                    />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -480,11 +725,12 @@ export default function MotoristasPage() {
                     >
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-semibold text-primary">
-                              {getInitials(name)}
-                            </span>
-                          </div>
+                          <DriverAvatar
+                            name={name}
+                            avatarUrl={driver.provider_profiles?.users?.avatar_url}
+                            size="sm"
+                            onClick={() => setPreviewDriver(driver)}
+                          />
                           <button
                             type="button"
                             onClick={() => handleOpenTripHistory(driver)}
@@ -551,6 +797,27 @@ export default function MotoristasPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => setPreviewDriver(driver)}
+                          className="mr-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-dark hover:bg-surface-hover transition-colors"
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
+                            />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          Perfil
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             setEditingDriver(driver);
                             setShowForm(true);
@@ -614,6 +881,96 @@ export default function MotoristasPage() {
         }}
         onSuccess={loadDrivers}
       />
+
+      {previewDriver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-xl border border-border bg-background shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div className="flex items-center gap-4">
+                <DriverAvatar
+                  name={
+                    previewDriver.provider_profiles?.users?.full_name ??
+                    "Motorista"
+                  }
+                  avatarUrl={
+                    previewDriver.provider_profiles?.users?.avatar_url
+                  }
+                  size="lg"
+                />
+                <div>
+                  <h2 className="text-lg font-heading font-bold text-dark">
+                    {previewDriver.provider_profiles?.users?.full_name ??
+                      "Motorista"}
+                  </h2>
+                  <p className="mt-1 text-sm text-contrast">
+                    {previewDriver.provider_profiles?.average_rating
+                      ? `Avaliação ${Number(
+                          previewDriver.provider_profiles.average_rating,
+                        ).toFixed(1)}`
+                      : "Sem avaliações"}
+                    {" • "}
+                    {previewDriver.is_available ? "Online" : "Offline"}
+                  </p>
+                  <p className="mt-1 text-xs text-contrast">
+                    {previewDriver.vehicle
+                      ? `${previewDriver.vehicle.brand} ${previewDriver.vehicle.model} ${previewDriver.vehicle.year} • ${previewDriver.vehicle.color} • ${previewDriver.vehicle.license_plate}`
+                      : "Veículo não cadastrado"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDriver(null)}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm text-dark hover:bg-surface-hover"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="max-h-[72vh] space-y-6 overflow-y-auto p-5">
+              <PreviewPhotoGrid
+                title="Fotos públicas do motorista"
+                photos={[...(previewDriver.driver_profile_photos ?? [])].sort(
+                  (a, b) => a.sort_order - b.sort_order,
+                )}
+                emptyText="Nenhuma foto pública enviada."
+                deletingPhotoId={deletingPhotoId}
+                onOpen={setLightboxPhoto}
+                onDelete={handleDeleteDriverPhoto}
+              />
+              <PreviewPhotoGrid
+                title="Fotos do veículo"
+                photos={
+                  (previewDriver.vehicle?.vehicle_photos ??
+                    []) as VehiclePhoto[]
+                }
+                emptyText="Nenhuma foto do veículo enviada."
+                deletingPhotoId={deletingPhotoId}
+                onOpen={setLightboxPhoto}
+                onDelete={handleDeleteVehiclePhoto}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lightboxPhoto && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+          <button
+            type="button"
+            onClick={() => setLightboxPhoto(null)}
+            className="absolute right-4 top-4 rounded-lg bg-white px-3 py-2 text-sm font-medium text-dark"
+          >
+            Fechar
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxPhoto}
+            alt="Foto ampliada"
+            className="max-h-[86vh] max-w-[92vw] rounded-lg object-contain"
+          />
+        </div>
+      )}
 
       {ratingsDriverName && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -706,7 +1063,10 @@ export default function MotoristasPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setHistoryDriverName(null)}
+                onClick={() => {
+                  setHistoryDriverName(null);
+                  setHistoryDriver(null);
+                }}
                 className="rounded-lg border border-border px-3 py-1.5 text-sm text-dark hover:bg-surface-hover"
               >
                 Fechar
@@ -714,11 +1074,59 @@ export default function MotoristasPage() {
             </div>
 
             <div className="max-h-[72vh] overflow-y-auto p-5">
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                {(Object.keys(metricPeriodLabels) as DriverMetricPeriod[]).map(
+                  (period) => (
+                    <button
+                      key={period}
+                      type="button"
+                      onClick={() => handleChangeHistoryPeriod(period)}
+                      className={`rounded-lg px-3 py-2 text-xs font-heading font-bold transition-colors ${
+                        historyPeriod === period
+                          ? "bg-primary text-background"
+                          : "border border-border bg-surface text-dark hover:bg-surface-hover"
+                      }`}
+                    >
+                      {metricPeriodLabels[period]}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-xl border border-border bg-surface p-4">
+                  <p className="text-xs text-contrast">Finalizadas</p>
+                  <p className="mt-1 text-2xl font-heading font-black text-dark">
+                    {driverMetrics.finishedTrips}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-surface p-4">
+                  <p className="text-xs text-contrast">Canceladas</p>
+                  <p className="mt-1 text-2xl font-heading font-black text-dark">
+                    {driverMetrics.cancelledTrips}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-surface p-4">
+                  <p className="text-xs text-contrast">Recusadas</p>
+                  <p className="mt-1 text-2xl font-heading font-black text-dark">
+                    {driverMetrics.refusedTrips}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-surface p-4">
+                  <p className="text-xs text-contrast">Média</p>
+                  <p className="mt-1 text-2xl font-heading font-black text-dark">
+                    {driverMetrics.averageRating > 0
+                      ? driverMetrics.averageRating.toFixed(1)
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+
               {tripHistoryLoading ? (
                 <p className="text-sm text-contrast">Carregando histórico...</p>
               ) : tripHistory.length === 0 ? (
                 <p className="text-sm text-contrast">
-                  Nenhuma corrida finalizada encontrada para este motorista.
+                  Nenhuma corrida encontrada para este período.
                 </p>
               ) : (
                 <div className="space-y-3">

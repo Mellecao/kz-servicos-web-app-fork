@@ -1,5 +1,6 @@
 export type UserRole = "client" | "provider" | "admin";
 export type ProviderStatus = "pending" | "approved" | "rejected" | "suspended";
+export type DriverMetricPeriod = "today" | "week" | "month" | "year";
 export type TripStatus =
   | "open"
   | "under_review"
@@ -102,6 +103,13 @@ export interface DriverProfilePhoto {
   created_at: string;
 }
 
+export interface DriverMetrics {
+  finishedTrips: number;
+  cancelledTrips: number;
+  refusedTrips: number;
+  averageRating: number;
+}
+
 export interface Vehicle {
   id: string;
   driver_profile_id: string;
@@ -115,6 +123,15 @@ export interface Vehicle {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  vehicle_photos?: VehiclePhoto[];
+}
+
+export interface VehiclePhoto {
+  id: string;
+  vehicle_id: string;
+  photo_url: string;
+  photo_type: string;
+  created_at: string;
 }
 
 export interface Address {
@@ -166,6 +183,22 @@ export interface Rating {
   created_at: string;
   rater?: Pick<User, "id" | "full_name" | "email">;
   rated?: Pick<User, "id" | "full_name" | "email">;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  type: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  link: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  is_pushed: boolean;
+  pushed_at: string | null;
+  created_at: string;
 }
 
 export interface Trip {
@@ -305,10 +338,12 @@ export interface Database {
       driver_profiles: { Row: DriverProfile };
       driver_profile_photos: { Row: DriverProfilePhoto };
       vehicles: { Row: Vehicle };
+      vehicle_photos: { Row: VehiclePhoto };
       addresses: { Row: Address };
       trips: { Row: Trip };
       trip_stops: { Row: TripStop };
       ratings: { Row: Rating };
+      notifications: { Row: Notification };
       service_requests: { Row: ServiceRequest };
       admin_logs: { Row: AdminLog };
     };
