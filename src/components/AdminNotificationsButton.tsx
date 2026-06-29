@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   fetchAdminNotifications,
@@ -21,11 +21,10 @@ function formatNotificationTime(iso: string) {
 
 export default function AdminNotificationsButton() {
   const router = useRouter();
-  const { session, userProfile, loading } = useAuth();
+  const { userProfile, loading } = useAuth();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
-  const pushedIds = useRef(new Set<string>());
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => !item.is_read).length,
@@ -63,21 +62,6 @@ export default function AdminNotificationsButton() {
         (payload) => {
           const next = payload.new as AdminNotification;
           setNotifications((current) => [next, ...current].slice(0, 20));
-          if (!pushedIds.current.has(next.id)) {
-            pushedIds.current.add(next.id);
-            void fetch("/api/admin-notifications/onesignal", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(session?.access_token
-                  ? { Authorization: `Bearer ${session.access_token}` }
-                  : {}),
-              },
-              body: JSON.stringify({ notificationId: next.id }),
-            }).catch((error) => {
-              console.error("Erro ao solicitar push OneSignal:", error);
-            });
-          }
         },
       )
       .subscribe();
@@ -85,7 +69,7 @@ export default function AdminNotificationsButton() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [session?.access_token, userProfile?.id, userProfile?.role]);
+  }, [userProfile?.id, userProfile?.role]);
 
   async function handleOpenNotification(item: AdminNotification) {
     if (!item.is_read) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
@@ -18,6 +19,13 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-body" suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
+      <Script id="onesignal-deferred-bootstrap" strategy="beforeInteractive">
+        {`window.OneSignalDeferred = window.OneSignalDeferred || [];`}
+      </Script>
+      <Script
+        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+        strategy="afterInteractive"
+      />
     </html>
   );
 }

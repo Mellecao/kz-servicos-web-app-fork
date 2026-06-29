@@ -77,6 +77,11 @@ export default function ViagensPage() {
         { event: "INSERT", schema: "public", table: "trips" },
         (payload) => {
           const next = payload.new as Trip;
+          setTrips((current) =>
+            current.some((trip) => trip.id === next.id)
+              ? current
+              : [next, ...current],
+          );
           showNotification(
             "Nova viagem solicitada",
             `Status: ${labelForTripStatus(next.status)}`
@@ -106,7 +111,11 @@ export default function ViagensPage() {
         { event: "DELETE", schema: "public", table: "trips" },
         () => loadTrips()
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        if (status === "CHANNEL_ERROR") {
+          console.error("Erro no realtime de viagens:", error);
+        }
+      });
     return () => {
       supabase.removeChannel(channel);
     };
