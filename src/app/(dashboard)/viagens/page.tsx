@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import KanbanBoard from "@/components/KanbanBoard";
 import KanbanListView, { type KanbanListColumn } from "@/components/KanbanListView";
 import TripDetailModal from "@/components/TripDetailModal";
@@ -17,6 +18,7 @@ import {
   canMoveTripStatus,
   getClientConfirmationBlockReason,
   getTripStatusActions,
+  isTripAdminActionRequired,
 } from "@/lib/trip-status";
 import { formatBrazilDateTime } from "@/lib/brazil-time";
 import type { Trip, TripStatus } from "@/types/database";
@@ -44,6 +46,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function ViagensPage() {
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +55,7 @@ export default function ViagensPage() {
   const [viewMode, setViewMode] = useState<'list' | 'board'>(() =>
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'board'
   );
+  const highlightedTripId = searchParams.get("highlightTrip");
 
   const loadTrips = useCallback(() => {
     setLoading(true);
@@ -68,6 +72,21 @@ export default function ViagensPage() {
   useEffect(() => {
     requestNotificationPermission();
   }, []);
+
+  useEffect(() => {
+    if (!highlightedTripId || loading) return;
+
+    const targetTrip = trips.find((trip) => trip.id === highlightedTripId);
+    if (!targetTrip) return;
+
+    window.setTimeout(() => {
+      setViewMode(window.innerWidth < 768 ? "list" : "board");
+      const card = document.querySelector(
+        `[data-card-id="${CSS.escape(highlightedTripId)}"]`,
+      );
+      card?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    }, 100);
+  }, [highlightedTripId, loading, trips]);
 
   useEffect(() => {
     const channel = supabase
@@ -176,6 +195,7 @@ export default function ViagensPage() {
         date: formatDate(t.scheduled_datetime),
         ...(t.is_round_trip ? { tag: "Ida e volta", tagColor: "#2261FE" } : {}),
         ...(t.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),
+        requiresAttention: isTripAdminActionRequired(t.status),
       })),
     };
   });
@@ -239,6 +259,7 @@ export default function ViagensPage() {
           columns={listColumns}
           onMoveCard={(cardId, fromCol, toCol) => handleCardMove(cardId, fromCol, toCol)}
           onCardClick={(card) => handleCardClick(card.id)}
+          highlightedCardId={highlightedTripId}
         />
       ) : (
         <div className="overflow-x-auto">
@@ -246,6 +267,7 @@ export default function ViagensPage() {
             columns={columns}
             onCardMove={handleCardMove}
             onCardClick={(cardId) => handleCardClick(cardId)}
+            highlightedCardId={highlightedTripId}
             canMoveCard={(fromCol, toCol) =>
               canMoveTripStatus(fromCol as TripStatus, toCol as TripStatus, "forward")
             }

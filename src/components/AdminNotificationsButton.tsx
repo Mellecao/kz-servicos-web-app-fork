@@ -4,11 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   fetchAdminNotifications,
+  fetchTrips,
   markNotificationRead,
 } from "@/lib/api";
+import { buildAdminNotificationHref } from "@/lib/admin-notification-navigation";
 import { useAuth } from "@/lib/auth-context";
+import { formatBrazilDateTime } from "@/lib/brazil-time";
+import { labelForTripStatus } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
-import type { Notification as AdminNotification } from "@/types/database";
+import type { Notification as AdminNotification, Trip } from "@/types/database";
 
 function formatNotificationTime(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {
@@ -19,11 +23,17 @@ function formatNotificationTime(iso: string) {
   });
 }
 
+function shortenAddress(address?: string | null) {
+  if (!address) return "Endereco nao informado";
+  return address.split(",")[0]?.trim() || address;
+}
+
 export default function AdminNotificationsButton() {
   const router = useRouter();
   const { userProfile, loading } = useAuth();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [tripDetails, setTripDetails] = useState<Record<string, Trip>>({});
   const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   const unreadCount = useMemo(
@@ -31,17 +41,46 @@ export default function AdminNotificationsButton() {
     [notifications],
   );
 
+  const loadTripDetails = useCallback(async (items: AdminNotification[]) => {
+    const tripIds = new Set(
+      items
+        .filter(
+          (item) => item.reference_type === "trip" && Boolean(item.reference_id),
+        )
+        .map((item) => item.reference_id as string),
+    );
+
+    if (tripIds.size === 0) return;
+
+    try {
+      const trips = await fetchTrips();
+      setTripDetails((current) => {
+        const next = { ...current };
+        trips
+          .filter((trip) => tripIds.has(trip.id))
+          .forEach((trip) => {
+            next[trip.id] = trip;
+          });
+        return next;
+      });
+    } catch (error) {
+      console.error("Erro ao carregar detalhes das corridas:", error);
+    }
+  }, []);
+
   const loadNotifications = useCallback(async () => {
     if (userProfile?.role !== "admin") return;
     setLoadingNotifications(true);
     try {
-      setNotifications(await fetchAdminNotifications());
+      const items = await fetchAdminNotifications();
+      setNotifications(items);
+      void loadTripDetails(items);
     } catch (error) {
       console.error("Erro ao carregar notificações admin:", error);
     } finally {
       setLoadingNotifications(false);
     }
-  }, [userProfile?.role]);
+  }, [loadTripDetails, userProfile?.role]);
 
   useEffect(() => {
     if (!loading) void loadNotifications();
@@ -62,6 +101,7 @@ export default function AdminNotificationsButton() {
         (payload) => {
           const next = payload.new as AdminNotification;
           setNotifications((current) => [next, ...current].slice(0, 20));
+          void loadTripDetails([next]);
         },
       )
       .subscribe();
@@ -69,7 +109,7 @@ export default function AdminNotificationsButton() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [userProfile?.id, userProfile?.role]);
+  }, [loadTripDetails, userProfile?.id, userProfile?.role]);
 
   async function handleOpenNotification(item: AdminNotification) {
     if (!item.is_read) {
@@ -86,8 +126,9 @@ export default function AdminNotificationsButton() {
         ),
       );
     }
-    if (item.link) {
-      router.push(item.link);
+    const href = buildAdminNotificationHref(item);
+    if (href) {
+      router.push(href);
       setOpen(false);
     }
   }
@@ -95,7 +136,7 @@ export default function AdminNotificationsButton() {
   if (loading || userProfile?.role !== "admin") return null;
 
   return (
-    <div className="fixed bottom-20 right-4 z-40 md:bottom-8 md:right-8">
+    <div className="fixed bottom-20 right-24 z-40 md:bottom-8 md:right-28">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -124,7 +165,7 @@ export default function AdminNotificationsButton() {
       </button>
 
       {open && (
-        <div className="absolute bottom-full right-0 mb-3 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background shadow-xl">
+        <div className="fixed inset-x-3 bottom-36 w-auto overflow-hidden rounded-xl border border-border bg-background shadow-xl md:absolute md:bottom-full md:right-0 md:inset-x-auto md:mb-3 md:w-[min(400px,calc(100vw-2rem))]">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-heading font-bold text-dark">
               Notificações
@@ -147,7 +188,13 @@ export default function AdminNotificationsButton() {
                 Nenhuma atualização recente.
               </p>
             ) : (
-              notifications.map((item) => (
+              notifications.map((item) => {
+                const trip =
+                  item.reference_type === "trip" && item.reference_id
+                    ? tripDetails[item.reference_id]
+                    : null;
+
+                return (
                 <button
                   key={item.id}
                   type="button"
@@ -167,11 +214,32 @@ export default function AdminNotificationsButton() {
                   <p className="mt-1 text-xs leading-5 text-contrast">
                     {item.body}
                   </p>
+                  {trip && (
+                    <div className="mt-3 rounded-md border border-danger/30 bg-danger/5 p-2 text-xs leading-5 text-dark">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-bold text-danger">
+                          Corrida em atenção
+                        </span>
+                        <span className="text-contrast">
+                          {labelForTripStatus(trip.status)}
+                        </span>
+                      </div>
+                      <p className="mt-1 font-medium">
+                        {shortenAddress(trip.pickup_address?.formatted_address)} →{" "}
+                        {shortenAddress(trip.dropoff_address?.formatted_address)}
+                      </p>
+                      <p className="mt-1 text-contrast">
+                        {trip.users?.full_name ?? "Cliente nao identificado"} ·{" "}
+                        {formatBrazilDateTime(trip.scheduled_datetime)}
+                      </p>
+                    </div>
+                  )}
                   <p className="mt-2 text-[11px] text-contrast/70">
                     {formatNotificationTime(item.created_at)}
                   </p>
                 </button>
-              ))
+              );
+              })
             )}
           </div>
         </div>

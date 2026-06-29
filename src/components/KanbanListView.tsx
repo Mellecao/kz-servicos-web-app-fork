@@ -19,6 +19,7 @@ interface KanbanListViewProps {
   columns: KanbanListColumn[];
   onMoveCard: (cardId: string, fromColumnId: string, toColumnId: string) => void;
   onCardClick?: (card: KanbanCard) => void;
+  highlightedCardId?: string | null;
 }
 
 // ─── Tab Button ────────────────────────────────────────────
@@ -56,16 +57,32 @@ function CardItem({
   column,
   onMoveCard,
   onCardClick,
+  isHighlighted,
 }: {
   card: KanbanCard;
   column: KanbanListColumn;
   onMoveCard: (cardId: string, fromColumnId: string, toColumnId: string) => void;
   onCardClick?: (card: KanbanCard) => void;
+  isHighlighted: boolean;
 }) {
   const subtitle = [card.subtitle, card.date].filter(Boolean).join(" · ");
 
+  const showAttention = isHighlighted || card.requiresAttention;
+
   return (
-    <div className="bg-surface rounded-xl border border-border p-4 mb-3">
+    <div
+      data-card-id={card.id}
+      className={`relative rounded-xl border p-4 mb-3 ${
+        showAttention
+          ? "border-danger bg-background ring-2 ring-danger/70 shadow-lg shadow-danger/10"
+          : "border-border bg-surface"
+      }`}
+    >
+      {showAttention && (
+        <span className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-danger text-xs font-black text-white shadow-md">
+          !
+        </span>
+      )}
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           {/* Status color dot */}
@@ -137,6 +154,7 @@ export default function KanbanListView({
   columns,
   onMoveCard,
   onCardClick,
+  highlightedCardId = null,
 }: KanbanListViewProps) {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
@@ -185,6 +203,7 @@ export default function KanbanListView({
               column={column}
               onMoveCard={onMoveCard}
               onCardClick={onCardClick}
+              isHighlighted={highlightedCardId === card.id}
             />
           ))
         )}

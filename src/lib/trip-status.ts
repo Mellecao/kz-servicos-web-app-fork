@@ -34,6 +34,16 @@ export function getTripStatusActions(status: TripStatus): TripStatusAction[] {
   return TRIP_STATUS_ACTIONS[status] ?? [];
 }
 
+export function isTripAdminActionRequired(status: TripStatus): boolean {
+  return [
+    "open",
+    "under_review",
+    "searching_drivers",
+    "awaiting_client_confirmation",
+    "awaiting_driver_confirmation",
+  ].includes(status);
+}
+
 export function canMoveTripStatus(
   fromStatus: TripStatus,
   toStatus: TripStatus,

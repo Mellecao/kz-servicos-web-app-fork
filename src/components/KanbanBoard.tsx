@@ -22,6 +22,7 @@ export interface KanbanCard {
   date: string;
   tag?: string;
   tagColor?: string;
+  requiresAttention?: boolean;
 }
 
 export interface KanbanColumn {
@@ -41,6 +42,7 @@ interface KanbanBoardProps {
   onCardMove?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
   onCardClick?: (cardId: string) => void;
   canMoveCard?: (fromColumnId: string, toColumnId: string) => boolean;
+  highlightedCardId?: string | null;
 }
 
 // ─── Draggable Card ────────────────────────────────────────
@@ -66,6 +68,8 @@ function DraggableCard({
     id: card.id,
   });
 
+  const showAttention = isHighlighted || card.requiresAttention;
+
   const style: React.CSSProperties = {
     ...(transform
       ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
@@ -83,10 +87,18 @@ function DraggableCard({
       {...attributes}
       style={style}
       onClick={onClick}
-      className={`bg-background/60 rounded-lg p-3.5 border border-border hover:border-primary/40 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
-        isHighlighted ? "ring-2 ring-primary/60" : ""
+      data-card-id={card.id}
+      className={`relative bg-background/60 rounded-lg p-3.5 border hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
+        showAttention
+          ? "border-danger ring-2 ring-danger/70 shadow-lg shadow-danger/10"
+          : "border-border hover:border-primary/40"
       }`}
     >
+      {showAttention && (
+        <span className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-danger text-xs font-black text-white shadow-md">
+          !
+        </span>
+      )}
       <p className="text-sm font-medium text-dark leading-snug">{card.title}</p>
       <p className="text-xs text-contrast mt-1">{card.subtitle}</p>
       <div className="flex items-center justify-between mt-2.5">
@@ -244,6 +256,7 @@ export default function KanbanBoard({
   onCardMove,
   onCardClick,
   canMoveCard,
+  highlightedCardId: externalHighlightedCardId = null,
 }: KanbanBoardProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
@@ -362,7 +375,7 @@ export default function KanbanBoard({
               isValidTarget={isValid}
               isOver={overColumnId === column.id}
               activeCardId={activeCardId}
-              highlightedCardId={highlightedCardId}
+              highlightedCardId={externalHighlightedCardId ?? highlightedCardId}
               onCardClick={onCardClick}
               onMoveCard={onCardMove}
             />

@@ -90,12 +90,12 @@ export async function promptOneSignalPushPermission() {
   const oneSignal = await initOneSignal();
   if (!oneSignal) return;
 
-  if (oneSignal.Slidedown?.promptPush) {
-    await oneSignal.Slidedown.promptPush();
+  if (oneSignal.Notifications?.requestPermission) {
+    await oneSignal.Notifications.requestPermission();
     return;
   }
 
-  await oneSignal.Notifications?.requestPermission?.();
+  await oneSignal.Slidedown?.promptPush?.();
 }
 
 export default function OneSignalInitializer() {

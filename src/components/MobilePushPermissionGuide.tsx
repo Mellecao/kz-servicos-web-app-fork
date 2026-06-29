@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
+  getMobilePushPlatform,
   getNotificationSettingsHref,
   isMobileUserAgent,
 } from "@/lib/push-permission-guidance";
 import { promptOneSignalPushPermission } from "@/components/OneSignalInitializer";
-
-const DISMISSED_KEY = "kz-admin-mobile-push-guide-dismissed";
 
 function getBrowserPermission() {
   if (typeof window === "undefined" || !("Notification" in window)) {
@@ -22,19 +21,27 @@ export default function MobilePushPermissionGuide() {
   const { loading, userProfile } = useAuth();
   const [permission, setPermission] = useState(getBrowserPermission);
   const [dismissed, setDismissed] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
 
   const userAgent =
     typeof window === "undefined" ? "" : window.navigator.userAgent;
 
   const isMobile = useMemo(() => isMobileUserAgent(userAgent), [userAgent]);
+  const platform = useMemo(() => getMobilePushPlatform(userAgent), [userAgent]);
   const settingsHref = useMemo(
     () => getNotificationSettingsHref(userAgent),
     [userAgent],
   );
 
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches ||
+      ("standalone" in window.navigator &&
+        Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)));
+
   useEffect(() => {
     void Promise.resolve().then(() => {
-      setDismissed(localStorage.getItem(DISMISSED_KEY) === "true");
+      setDismissed(false);
       setPermission(getBrowserPermission());
     });
   }, []);
@@ -44,12 +51,34 @@ export default function MobilePushPermissionGuide() {
   }, []);
 
   async function handlePrompt() {
-    await promptOneSignalPushPermission();
-    refreshPermission();
+    setMessage(null);
+
+    if (platform === "ios" && !isStandalone) {
+      setMessage(
+        "No iPhone, instale o painel na Tela de Inicio: toque em Compartilhar e depois em Adicionar a Tela de Inicio. Abra pelo icone instalado e toque em Permitir notificacoes.",
+      );
+      return;
+    }
+
+    try {
+      await promptOneSignalPushPermission();
+      refreshPermission();
+      setMessage(
+        getBrowserPermission() === "granted"
+          ? "Notificacoes ativadas neste dispositivo."
+          : "Se o aviso nao apareceu, confirme se este site pode enviar notificacoes nas configuracoes do navegador.",
+      );
+    } catch (error) {
+      console.error("Erro ao solicitar permissao de push:", error);
+      setMessage(
+        platform === "ios"
+          ? "No iPhone, abra o painel pelo icone instalado na Tela de Inicio e tente novamente."
+          : "Nao foi possivel abrir a permissao. Verifique as configuracoes de notificacao do navegador.",
+      );
+    }
   }
 
   function handleDismiss() {
-    localStorage.setItem(DISMISSED_KEY, "true");
     setDismissed(true);
   }
 
@@ -72,11 +101,20 @@ export default function MobilePushPermissionGuide() {
             Permita notificações deste painel no celular para receber alertas
             quando uma corrida precisar de ação do admin.
           </p>
+          {platform === "ios" && !isStandalone && (
+            <p className="mt-2 text-xs leading-5 text-warning">
+              No iPhone, notificações web só funcionam depois de adicionar o
+              painel à Tela de Início e abrir pelo ícone instalado.
+            </p>
+          )}
           {permission === "denied" && (
             <p className="mt-2 text-xs leading-5 text-danger">
               A permissão está bloqueada. Abra as configurações do navegador ou
               do app e libere notificações para este site.
             </p>
+          )}
+          {message && (
+            <p className="mt-2 text-xs leading-5 text-contrast">{message}</p>
           )}
         </div>
         <button
@@ -94,7 +132,9 @@ export default function MobilePushPermissionGuide() {
           onClick={handlePrompt}
           className="rounded-md bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary-dark"
         >
-          Permitir notificações
+          {platform === "ios" && !isStandalone
+            ? "Ver como ativar"
+            : "Permitir notificações"}
         </button>
         {settingsHref && (
           <a

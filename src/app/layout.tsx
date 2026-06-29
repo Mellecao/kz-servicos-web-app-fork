@@ -6,6 +6,15 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 export const metadata: Metadata = {
   title: "Painel ADM",
   description: "Painel administrativo",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "KZ Admin",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    apple: "/assets/logo.png",
+  },
 };
 
 export default function RootLayout({
