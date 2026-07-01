@@ -83,6 +83,8 @@ const serviceStatusLabels: Record<ServiceRequestStatus, string> = {
   under_review: "Em análise",
   review_rejected: "Rejeitado",
   searching_provider: "Buscando prestador",
+  awaiting_client_confirmation: "Aguard. cliente",
+  awaiting_provider_confirmation: "Aguard. prestador",
   assigned: "Atribuído",
   in_progress: "Em andamento",
   finished: "Finalizado",

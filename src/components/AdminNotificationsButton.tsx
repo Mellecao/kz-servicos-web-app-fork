@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  deleteAdminNotification,
+  deleteAllAdminNotifications,
   fetchAdminNotifications,
   fetchTrips,
-  markNotificationRead,
 } from "@/lib/api";
 import { buildAdminNotificationHref } from "@/lib/admin-notification-navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -35,6 +36,7 @@ export default function AdminNotificationsButton() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [tripDetails, setTripDetails] = useState<Record<string, Trip>>({});
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [clearingNotifications, setClearingNotifications] = useState(false);
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => !item.is_read).length,
@@ -112,24 +114,46 @@ export default function AdminNotificationsButton() {
   }, [loadTripDetails, userProfile?.id, userProfile?.role]);
 
   async function handleOpenNotification(item: AdminNotification) {
-    if (!item.is_read) {
-      await markNotificationRead(item.id);
-      setNotifications((current) =>
-        current.map((notification) =>
-          notification.id === item.id
-            ? {
-                ...notification,
-                is_read: true,
-                read_at: new Date().toISOString(),
-              }
-            : notification,
-        ),
-      );
+    setNotifications((current) =>
+      current.filter((notification) => notification.id !== item.id),
+    );
+    try {
+      await deleteAdminNotification(item.id);
+    } catch (error) {
+      console.error("Erro ao excluir notificação:", error);
     }
+
     const href = buildAdminNotificationHref(item);
     if (href) {
       router.push(href);
       setOpen(false);
+    }
+  }
+
+  async function handleDeleteNotification(item: AdminNotification) {
+    setNotifications((current) =>
+      current.filter((notification) => notification.id !== item.id),
+    );
+    try {
+      await deleteAdminNotification(item.id);
+    } catch (error) {
+      console.error("Erro ao excluir notificação:", error);
+      void loadNotifications();
+    }
+  }
+
+  async function handleClearAll() {
+    setClearingNotifications(true);
+    const previous = notifications;
+    setNotifications([]);
+    setTripDetails({});
+    try {
+      await deleteAllAdminNotifications();
+    } catch (error) {
+      console.error("Erro ao limpar notificações:", error);
+      setNotifications(previous);
+    } finally {
+      setClearingNotifications(false);
     }
   }
 
@@ -166,17 +190,29 @@ export default function AdminNotificationsButton() {
 
       {open && (
         <div className="fixed inset-x-3 bottom-36 w-auto overflow-hidden rounded-xl border border-border bg-background shadow-xl md:absolute md:bottom-full md:right-0 md:inset-x-auto md:mb-3 md:w-[min(400px,calc(100vw-2rem))]">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <h2 className="text-sm font-heading font-bold text-dark">
               Notificações
             </h2>
-            <button
-              type="button"
-              onClick={loadNotifications}
-              className="text-xs font-medium text-primary hover:text-primary-dark"
-            >
-              Atualizar
-            </button>
+            <div className="flex items-center gap-3">
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={clearingNotifications}
+                  className="text-xs font-medium text-danger hover:opacity-80 disabled:opacity-50"
+                >
+                  Limpar todas
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={loadNotifications}
+                className="text-xs font-medium text-primary hover:text-primary-dark"
+              >
+                Atualizar
+              </button>
+            </div>
           </div>
           <div className="max-h-[420px] overflow-y-auto">
             {loadingNotifications ? (
@@ -195,50 +231,62 @@ export default function AdminNotificationsButton() {
                     : null;
 
                 return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleOpenNotification(item)}
-                  className={`block w-full border-b border-border px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-surface-hover ${
-                    item.is_read ? "bg-background" : "bg-primary/5"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-heading font-bold text-dark">
-                      {item.title}
-                    </p>
-                    {!item.is_read && (
-                      <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-contrast">
-                    {item.body}
-                  </p>
-                  {trip && (
-                    <div className="mt-3 rounded-md border border-danger/30 bg-danger/5 p-2 text-xs leading-5 text-dark">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-bold text-danger">
-                          Corrida em atenção
-                        </span>
-                        <span className="text-contrast">
-                          {labelForTripStatus(trip.status)}
-                        </span>
+                  <div
+                    key={item.id}
+                    className={`relative border-b border-border transition-colors last:border-b-0 hover:bg-surface-hover ${
+                      item.is_read ? "bg-background" : "bg-primary/5"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleOpenNotification(item)}
+                      className="block w-full px-4 py-3 pr-11 text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-heading font-bold text-dark">
+                          {item.title}
+                        </p>
+                        {!item.is_read && (
+                          <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                        )}
                       </div>
-                      <p className="mt-1 font-medium">
-                        {shortenAddress(trip.pickup_address?.formatted_address)} →{" "}
-                        {shortenAddress(trip.dropoff_address?.formatted_address)}
+                      <p className="mt-1 text-xs leading-5 text-contrast">
+                        {item.body}
                       </p>
-                      <p className="mt-1 text-contrast">
-                        {trip.users?.full_name ?? "Cliente nao identificado"} ·{" "}
-                        {formatBrazilDateTime(trip.scheduled_datetime)}
+                      {trip && (
+                        <div className="mt-3 rounded-md border border-danger/30 bg-danger/5 p-2 text-xs leading-5 text-dark">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-bold text-danger">
+                              Corrida em atenção
+                            </span>
+                            <span className="text-contrast">
+                              {labelForTripStatus(trip.status)}
+                            </span>
+                          </div>
+                          <p className="mt-1 font-medium">
+                            {shortenAddress(trip.pickup_address?.formatted_address)} →{" "}
+                            {shortenAddress(trip.dropoff_address?.formatted_address)}
+                          </p>
+                          <p className="mt-1 text-contrast">
+                            {trip.users?.full_name ?? "Cliente nao identificado"} ·{" "}
+                            {formatBrazilDateTime(trip.scheduled_datetime)}
+                          </p>
+                        </div>
+                      )}
+                      <p className="mt-2 text-[11px] text-contrast/70">
+                        {formatNotificationTime(item.created_at)}
                       </p>
-                    </div>
-                  )}
-                  <p className="mt-2 text-[11px] text-contrast/70">
-                    {formatNotificationTime(item.created_at)}
-                  </p>
-                </button>
-              );
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteNotification(item)}
+                      className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full text-contrast transition-colors hover:bg-background hover:text-danger"
+                      aria-label="Excluir notificação"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
               })
             )}
           </div>

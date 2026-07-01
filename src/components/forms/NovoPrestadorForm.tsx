@@ -3,6 +3,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import { useToast } from "@/components/Toast";
+import { supabase } from "@/lib/supabase";
 import {
   createUser,
   createProviderProfile,
@@ -35,6 +36,7 @@ export default function NovoPrestadorForm({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [cpf, setCpf] = useState("");
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
 
   // Perfil de serviço
   const [categoryId, setCategoryId] = useState("");
@@ -56,10 +58,30 @@ export default function NovoPrestadorForm({
     setEmail("");
     setPhone("");
     setCpf("");
+    setProfilePhotoFile(null);
     setCategoryId("");
     setBio("");
     setHasCardMachine(false);
     setIssuesInvoice(false);
+  }
+
+  async function uploadProfilePhoto(userId: string) {
+    if (!profilePhotoFile) return;
+    const ext = profilePhotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${userId}/profile-${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("Profile_Images")
+      .upload(path, profilePhotoFile, { upsert: true });
+    if (uploadError) throw uploadError;
+
+    const publicUrl = `${supabase.storage
+      .from("Profile_Images")
+      .getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ avatar_url: publicUrl })
+      .eq("id", userId);
+    if (updateError) throw updateError;
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -84,6 +106,7 @@ export default function NovoPrestadorForm({
         cpf: cpf || null,
         role: "provider",
       });
+      await uploadProfilePhoto(user.id);
 
       // 2. Create provider profile
       await createProviderProfile({
@@ -192,6 +215,24 @@ export default function NovoPrestadorForm({
             placeholder="000.000.000-00"
             className={inputClass}
           />
+        </div>
+
+        <div>
+          <label htmlFor="provider-profile-photo" className={labelClass}>
+            Foto de perfil
+          </label>
+          <input
+            id="provider-profile-photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setProfilePhotoFile(e.target.files?.[0] ?? null)}
+            className={inputClass}
+          />
+          {profilePhotoFile && (
+            <p className="mt-2 text-xs text-contrast">
+              {profilePhotoFile.name}
+            </p>
+          )}
         </div>
 
         {/* Section: Perfil de Serviço */}

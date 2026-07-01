@@ -6,7 +6,15 @@ import KanbanListView, { type KanbanListColumn } from "@/components/KanbanListVi
 import ServiceDetailModal from "@/components/ServiceDetailModal";
 import NovaSolicitacaoForm from "@/components/forms/NovaSolicitacaoForm";
 import { useToast } from "@/components/Toast";
-import { fetchServiceRequests, updateServiceRequestStatus } from "@/lib/api";
+import {
+  fetchServiceRequestProviderCandidates,
+  fetchServiceRequests,
+  updateServiceRequestStatus,
+} from "@/lib/api";
+import {
+  getServiceClientConfirmationBlockReason,
+  isServiceAdminActionRequired,
+} from "@/lib/service-status";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/database";
 
 const serviceColumnConfig: {
@@ -17,6 +25,16 @@ const serviceColumnConfig: {
   { id: "open", title: "Aberto", color: "#FEBF22" },
   { id: "under_review", title: "Em Análise", color: "#5C5956" },
   { id: "searching_provider", title: "Buscando Prestador", color: "#2261FE" },
+  {
+    id: "awaiting_client_confirmation",
+    title: "Aguardando Cliente",
+    color: "#f97316",
+  },
+  {
+    id: "awaiting_provider_confirmation",
+    title: "Aguardando Prestador",
+    color: "#f97316",
+  },
   { id: "assigned", title: "Atribuído", color: "#2261FE" },
   { id: "in_progress", title: "Em Andamento", color: "#22c55e" },
   { id: "finished", title: "Finalizado", color: "#22c55e" },
@@ -58,6 +76,22 @@ export default function OutrosServicosPage() {
   const handleCardMove = useCallback(
     async (cardId: string, _fromColumnId: string, toColumnId: string) => {
       const newStatus = toColumnId as ServiceRequestStatus;
+      if (
+        _fromColumnId === "searching_provider" &&
+        toColumnId === "awaiting_client_confirmation"
+      ) {
+        try {
+          const candidates = await fetchServiceRequestProviderCandidates(cardId);
+          const blockReason = getServiceClientConfirmationBlockReason(candidates);
+          if (blockReason) {
+            toast("warning", blockReason);
+            return;
+          }
+        } catch {
+          toast("danger", "Erro ao verificar preços aprovados dos prestadores");
+          return;
+        }
+      }
       // Optimistic update
       setRequests((prev) =>
         prev.map((r) => (r.id === cardId ? { ...r, status: newStatus } : r))
@@ -94,6 +128,7 @@ export default function OutrosServicosPage() {
           ? { tag: r.service_categories.name, tagColor: "#2261FE" }
           : {}),
         ...(r.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),
+        requiresAttention: isServiceAdminActionRequired(r.status),
       })),
     };
   });
@@ -101,7 +136,9 @@ export default function OutrosServicosPage() {
   const listActionConfig: Record<string, { actionLabel: string; nextColumnId: string }> = {
     open: { actionLabel: "Analisar", nextColumnId: "under_review" },
     under_review: { actionLabel: "Buscar Prestador", nextColumnId: "searching_provider" },
-    searching_provider: { actionLabel: "Atribuir", nextColumnId: "assigned" },
+    searching_provider: { actionLabel: "Aguard. cliente", nextColumnId: "awaiting_client_confirmation" },
+    awaiting_client_confirmation: { actionLabel: "Aguard. prestador", nextColumnId: "awaiting_provider_confirmation" },
+    awaiting_provider_confirmation: { actionLabel: "Atribuir", nextColumnId: "assigned" },
     assigned: { actionLabel: "Iniciar", nextColumnId: "in_progress" },
     in_progress: { actionLabel: "Finalizar", nextColumnId: "finished" },
   };

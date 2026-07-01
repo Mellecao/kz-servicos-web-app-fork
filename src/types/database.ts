@@ -17,6 +17,8 @@ export type ServiceRequestStatus =
   | "under_review"
   | "review_rejected"
   | "searching_provider"
+  | "awaiting_client_confirmation"
+  | "awaiting_provider_confirmation"
   | "assigned"
   | "in_progress"
   | "finished"
@@ -266,6 +268,39 @@ export interface ServiceRequest {
     users?: User;
   };
   users?: User;
+  service_request_photos?: ServiceRequestPhoto[];
+  service_request_provider_candidates?: ServiceRequestProviderCandidate[];
+}
+
+export interface ServiceRequestPhoto {
+  id: string;
+  service_request_id: string;
+  photo_url: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export type ServiceRequestProviderCandidateStatus = "pending" | "accepted" | "rejected";
+
+export interface ServiceRequestProviderCandidate {
+  id: string;
+  service_request_id: string;
+  provider_profile_id: string;
+  status: ServiceRequestProviderCandidateStatus;
+  offered_price: number | null;
+  admin_approved: boolean;
+  price_rejection_reason?: string | null;
+  price_rejected_at?: string | null;
+  kz_proposed_price?: number | null;
+  kz_proposed_at?: string | null;
+  kz_proposal_locked?: boolean;
+  invited_at: string;
+  responded_at: string | null;
+  observations: string | null;
+  created_at: string;
+  provider_profiles?: ProviderProfile & {
+    users?: User;
+  };
 }
 
 // Unified financial record from trips and service_requests
@@ -345,6 +380,10 @@ export interface Database {
       ratings: { Row: Rating };
       notifications: { Row: Notification };
       service_requests: { Row: ServiceRequest };
+      service_request_photos: { Row: ServiceRequestPhoto };
+      service_request_provider_candidates: {
+        Row: ServiceRequestProviderCandidate;
+      };
       admin_logs: { Row: AdminLog };
     };
   };

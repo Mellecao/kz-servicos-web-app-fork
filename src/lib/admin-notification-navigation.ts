@@ -12,7 +12,7 @@ export function buildAdminNotificationHref(
     notification.reference_type === "trip" &&
     notification.reference_id
   ) {
-    return `/viagens?highlightTrip=${encodeURIComponent(notification.reference_id)}`;
+    return `/viagens?openTrip=${encodeURIComponent(notification.reference_id)}`;
   }
 
   return notification.link ?? null;

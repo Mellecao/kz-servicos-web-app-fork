@@ -177,6 +177,7 @@ export default function TripDetailModal({
     [],
   );
   const [driverHistoryLoading, setDriverHistoryLoading] = useState(false);
+  const [showClientPhonePopup, setShowClientPhonePopup] = useState(false);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
@@ -252,6 +253,7 @@ export default function TripDetailModal({
     setCandidatePriceInputs({});
     setDriverHistoryName(null);
     setDriverHistory([]);
+    setShowClientPhonePopup(false);
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
 
@@ -309,6 +311,14 @@ export default function TripDetailModal({
   const t = liveTrip;
   const route = `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`;
   const passengerName = t.users?.full_name ?? "—";
+  const passengerPhone = t.users?.phone ?? "";
+  const passengerPhoneDigits = passengerPhone.replace(/\D/g, "");
+  const passengerWhatsappNumber =
+    passengerPhoneDigits.length >= 10
+      ? passengerPhoneDigits.startsWith("55")
+        ? passengerPhoneDigits
+        : `55${passengerPhoneDigits}`
+      : "";
   const orderedStops = [...(t.trip_stops ?? [])].sort(
     (a, b) => a.stop_order - b.stop_order,
   );
@@ -320,6 +330,8 @@ export default function TripDetailModal({
   const forwardActions = getTripStatusActions(t.status).filter(
     (action) => action.direction === "forward",
   );
+  const visibleForwardActions =
+    t.status === "awaiting_driver_confirmation" ? [] : forwardActions;
   const rollbackActions = getTripStatusActions(t.status).filter(
     (action) => action.direction === "back",
   );
@@ -788,7 +800,35 @@ export default function TripDetailModal({
                   </span>
                 }
               />
-              <InfoRow label="Cliente" value={t.users?.full_name ?? "—"} />
+              <InfoRow
+                label="Cliente"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <span>{t.users?.full_name ?? "—"}</span>
+                    {passengerPhone && (
+                      <button
+                        type="button"
+                        onClick={() => setShowClientPhonePopup(true)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-contrast hover:bg-surface-hover hover:text-dark transition-colors"
+                        aria-label="Abrir contato do cliente"
+                        title="Telefone do cliente"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.92.32 1.82.6 2.69a2 2 0 0 1-.45 2.11L8 9a16 16 0 0 0 7 7l.48-.86a2 2 0 0 1 2.11-.45c.87.28 1.77.48 2.69.6A2 2 0 0 1 22 16.92z" />
+                        </svg>
+                      </button>
+                    )}
+                  </span>
+                }
+              />
               <InfoRow
                 label="Categoria"
                 value={t.service_categories?.name ?? "—"}
@@ -849,6 +889,13 @@ export default function TripDetailModal({
                       {resendingDriverConfirmation
                         ? "Reenviando..."
                         : "Reenviar pedido ao motorista"}
+                    </button>
+                    <button
+                      onClick={() => handleMoveStatus("scheduled")}
+                      disabled={actioning}
+                      className="mt-2 w-full py-2 rounded-lg bg-accent text-background text-sm font-heading font-bold hover:bg-accent-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                    >
+                      {actioning ? "Aprovando..." : "Motorista: aprovar"}
                     </button>
                   </div>
                 </>
@@ -920,11 +967,12 @@ export default function TripDetailModal({
               )}
 
               {t.status !== "under_review" &&
-                (forwardActions.length > 0 || rollbackActions.length > 0) && (
+                (visibleForwardActions.length > 0 ||
+                  rollbackActions.length > 0) && (
                   <>
                     <SectionTitle>Ações</SectionTitle>
                     <div className="flex flex-col gap-2">
-                      {forwardActions.map((action) => (
+                      {visibleForwardActions.map((action) => (
                         <button
                           key={action.to}
                           onClick={() => handleMoveStatus(action.to)}
@@ -1587,6 +1635,74 @@ export default function TripDetailModal({
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showClientPhonePopup && passengerPhone && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-heading font-bold text-dark">
+                  Telefone do cliente
+                </p>
+                <p className="mt-1 text-sm text-contrast">{passengerPhone}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClientPhonePopup(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-contrast hover:bg-background hover:text-dark transition-colors"
+                aria-label="Fechar popup"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(`tel:${passengerPhone}`, "_self");
+                  setShowClientPhonePopup(false);
+                }}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-heading font-bold text-background hover:bg-primary-dark transition-colors"
+              >
+                Ligar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(passengerPhone);
+                  toast("success", "Número copiado");
+                }}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-heading font-bold text-dark hover:bg-background transition-colors"
+              >
+                Copiar número
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const whatsappUrl = passengerWhatsappNumber
+                    ? `https://wa.me/${passengerWhatsappNumber}`
+                    : `https://wa.me/?text=${encodeURIComponent(passengerPhone)}`;
+                  window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                }}
+                className="rounded-lg bg-[#22c55e] px-4 py-2 text-sm font-heading font-bold text-white hover:opacity-90 transition-opacity"
+              >
+                WhatsApp
+              </button>
             </div>
           </div>
         </div>

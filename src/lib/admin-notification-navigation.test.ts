@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { buildAdminNotificationHref } from "./admin-notification-navigation.ts";
 import { isTripAdminActionRequired } from "./trip-status.ts";
 
-test("links trip notifications to the highlighted trip on the trips page", () => {
+test("links trip notifications to open the trip on the trips page", () => {
   assert.equal(
     buildAdminNotificationHref({
       link: "/viagens",
       reference_type: "trip",
       reference_id: "trip-123",
     }),
-    "/viagens?highlightTrip=trip-123",
+    "/viagens?openTrip=trip-123",
   );
 });
 

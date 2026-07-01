@@ -1,9 +1,26 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { ServiceRequest, PaymentMethod } from "@/types/database";
-import { updateServiceRequestFinancial } from "@/lib/api";
+import type {
+  PaymentMethod,
+  ProviderProfile,
+  ServiceRequest,
+  ServiceRequestProviderCandidate,
+} from "@/types/database";
+import {
+  addServiceRequestProviderCandidate,
+  approveServiceRequestForClient,
+  approveServiceRequestForProvider,
+  approveServiceRequestProviderCandidate,
+  fetchProviderProfiles,
+  removeServiceRequestProviderCandidate,
+  rejectServiceRequestProviderCandidatePrice,
+  sendKzServiceRequestProposal,
+  updateServiceRequestFinancial,
+  updateServiceRequestProviderCandidatePrice,
+} from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { canAdminApproveServiceForClient } from "@/lib/service-candidate-actions";
 
 interface ServiceDetailModalProps {
   request: ServiceRequest | null;
@@ -17,6 +34,8 @@ const statusLabels: Record<string, string> = {
   under_review: "Em Análise",
   review_rejected: "Rejeitado na Análise",
   searching_provider: "Buscando Prestador",
+  awaiting_client_confirmation: "Aguardando Cliente",
+  awaiting_provider_confirmation: "Aguardando Prestador",
   assigned: "Atribuído",
   in_progress: "Em Andamento",
   finished: "Finalizado",
@@ -28,6 +47,8 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   under_review: { bg: "#94A3B820", text: "#94A3B8" },
   review_rejected: { bg: "#ef444420", text: "#ef4444" },
   searching_provider: { bg: "#2261FE20", text: "#2261FE" },
+  awaiting_client_confirmation: { bg: "#f9731620", text: "#f97316" },
+  awaiting_provider_confirmation: { bg: "#f9731620", text: "#f97316" },
   assigned: { bg: "#2261FE20", text: "#2261FE" },
   in_progress: { bg: "#22c55e20", text: "#22c55e" },
   finished: { bg: "#22c55e20", text: "#22c55e" },
@@ -83,6 +104,11 @@ export default function ServiceDetailModal({
   const [finalPriceInput, setFinalPriceInput] = useState("");
   const [paymentMethodInput, setPaymentMethodInput] = useState<PaymentMethod | "">("");
   const [financialSaving, setFinancialSaving] = useState(false);
+  const [providers, setProviders] = useState<ProviderProfile[]>([]);
+  const [candidates, setCandidates] = useState<ServiceRequestProviderCandidate[]>([]);
+  const [providerSelectionId, setProviderSelectionId] = useState("");
+  const [candidatePriceInputs, setCandidatePriceInputs] = useState<Record<string, string>>({});
+  const [candidateActioningId, setCandidateActioningId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !request) return;
@@ -90,7 +116,32 @@ export default function ServiceDetailModal({
     setIsProviderPaied(request.is_provider_paied ?? false);
     setFinalPriceInput(request.final_price?.toString() ?? "");
     setPaymentMethodInput(request.payment_method ?? "");
+    setCandidates(request.service_request_provider_candidates ?? []);
+    setCandidatePriceInputs((current) => {
+      const next = { ...current };
+      for (const candidate of request.service_request_provider_candidates ?? []) {
+        if (next[candidate.id] === undefined) {
+          next[candidate.id] =
+            candidate.offered_price == null ? "" : String(candidate.offered_price);
+        }
+      }
+      return next;
+    });
   }, [open, request]);
+
+  useEffect(() => {
+    if (!open || !request) return;
+    fetchProviderProfiles()
+      .then((items) =>
+        setProviders(
+          items.filter(
+            (provider) =>
+              provider.service_category_id === request.service_category_id,
+          ).filter((provider) => provider.status === "approved"),
+        ),
+      )
+      .catch(() => toast("danger", "Erro ao carregar prestadores"));
+  }, [open, request, toast]);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
@@ -122,6 +173,12 @@ export default function ServiceDetailModal({
 
   const r = request;
   const statusColor = statusColors[r.status] ?? { bg: "#FEBF2220", text: "#FEBF22" };
+  const candidateProviderIds = new Set(
+    candidates.map((candidate) => candidate.provider_profile_id),
+  );
+  const availableProviders = providers.filter(
+    (provider) => !candidateProviderIds.has(provider.id),
+  );
 
   async function handleToggleIsPaid() {
     const next = !isPaid;
@@ -161,6 +218,163 @@ export default function ServiceDetailModal({
       toast("danger", "Erro ao salvar dados financeiros");
     } finally {
       setFinancialSaving(false);
+    }
+  }
+
+  async function handleAddCandidate() {
+    if (!providerSelectionId) return;
+    setCandidateActioningId(providerSelectionId);
+    try {
+      const created = await addServiceRequestProviderCandidate(
+        r.id,
+        providerSelectionId,
+      );
+      setCandidates((current) => [created, ...current]);
+      setProviderSelectionId("");
+      onUpdate?.();
+      toast("success", "Prestador adicionado como candidato");
+    } catch (error) {
+      console.error(error);
+      toast("danger", "Erro ao adicionar prestador");
+    } finally {
+      setCandidateActioningId(null);
+    }
+  }
+
+  async function handleRemoveCandidate(candidate: ServiceRequestProviderCandidate) {
+    setCandidateActioningId(candidate.id);
+    try {
+      await removeServiceRequestProviderCandidate(
+        r.id,
+        candidate.provider_profile_id,
+      );
+      setCandidates((current) =>
+        current.filter((item) => item.id !== candidate.id),
+      );
+      onUpdate?.();
+    } catch (error) {
+      console.error(error);
+      toast("danger", "Erro ao remover candidato");
+    } finally {
+      setCandidateActioningId(null);
+    }
+  }
+
+  async function handleUpdateCandidatePrice(
+    candidate: ServiceRequestProviderCandidate,
+  ) {
+    const raw = candidatePriceInputs[candidate.id]?.trim() ?? "";
+    const parsed = raw === "" ? null : Number(raw.replace(",", "."));
+    if (parsed != null && Number.isNaN(parsed)) {
+      toast("warning", "Informe um preço válido");
+      return;
+    }
+    setCandidateActioningId(candidate.id);
+    try {
+      const updated = await updateServiceRequestProviderCandidatePrice(
+        r.id,
+        candidate.provider_profile_id,
+        parsed,
+      );
+      setCandidates((current) =>
+        current.map((item) => (item.id === candidate.id ? updated : item)),
+      );
+      setCandidatePriceInputs((current) => ({
+        ...current,
+        [candidate.id]: parsed == null ? "" : String(parsed),
+      }));
+      onUpdate?.();
+      toast("success", "Preço atualizado");
+    } catch (error) {
+      console.error(error);
+      toast("danger", "Erro ao atualizar preço");
+    } finally {
+      setCandidateActioningId(null);
+    }
+  }
+
+  async function handleRejectCandidatePrice(
+    candidate: ServiceRequestProviderCandidate,
+  ) {
+    setCandidateActioningId(candidate.id);
+    try {
+      const updated = await rejectServiceRequestProviderCandidatePrice(
+        r.id,
+        candidate.provider_profile_id,
+      );
+      setCandidates((current) =>
+        current.map((item) => (item.id === candidate.id ? updated : item)),
+      );
+      setCandidatePriceInputs((current) => ({ ...current, [candidate.id]: "" }));
+      onUpdate?.();
+    } catch (error) {
+      console.error(error);
+      toast("danger", "Erro ao recusar preço");
+    } finally {
+      setCandidateActioningId(null);
+    }
+  }
+
+  async function handleSendKzProposal(
+    candidate: ServiceRequestProviderCandidate,
+  ) {
+    const raw = candidatePriceInputs[candidate.id]?.trim() ?? "";
+    const parsed = raw === "" ? NaN : Number(raw.replace(",", "."));
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      toast("warning", "Informe uma proposta KZ válida");
+      return;
+    }
+    setCandidateActioningId(candidate.id);
+    try {
+      const updated = await sendKzServiceRequestProposal(
+        r.id,
+        candidate.provider_profile_id,
+        parsed,
+      );
+      setCandidates((current) =>
+        current.map((item) => (item.id === candidate.id ? updated : item)),
+      );
+      setCandidatePriceInputs((current) => ({
+        ...current,
+        [candidate.id]: String(parsed),
+      }));
+      onUpdate?.();
+      toast("success", "Proposta enviada");
+    } catch (error) {
+      console.error(error);
+      toast("danger", "Erro ao enviar proposta");
+    } finally {
+      setCandidateActioningId(null);
+    }
+  }
+
+  async function handleApproveCandidateForClient(
+    candidate: ServiceRequestProviderCandidate,
+  ) {
+    if (
+      !canAdminApproveServiceForClient(r.status, {
+        status: candidate.status,
+        admin_approved: candidate.admin_approved,
+        offered_price: candidate.offered_price,
+      })
+    ) {
+      toast("warning", "A proposta ainda não está pronta para o cliente");
+      return;
+    }
+    setCandidateActioningId(candidate.id);
+    try {
+      await approveServiceRequestProviderCandidate(
+        r.id,
+        candidate.provider_profile_id,
+        candidate.offered_price!,
+      );
+      onUpdate?.();
+      toast("success", "Cliente: aprovar");
+    } catch (error) {
+      console.error(error);
+      toast("danger", "Erro ao aprovar para o cliente");
+    } finally {
+      setCandidateActioningId(null);
     }
   }
 
@@ -256,6 +470,190 @@ export default function ServiceDetailModal({
                 <p className="text-xs text-dark">{r.provider_observations}</p>
               </div>
             )}
+
+            {r.service_request_photos && r.service_request_photos.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs text-contrast font-medium mb-2">Fotos da solicitação</p>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                  {r.service_request_photos
+                    .slice()
+                    .sort((a, b) => a.sort_order - b.sort_order)
+                    .map((photo) => (
+                      <a
+                        key={photo.id}
+                        href={photo.photo_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-lg border border-border bg-background"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photo.photo_url}
+                          alt="Foto da solicitação"
+                          className="h-28 w-full object-cover"
+                        />
+                      </a>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 rounded-xl border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-heading font-bold text-dark">
+                    Propostas e prestadores
+                  </p>
+                  <p className="mt-1 text-xs text-contrast">
+                    Adicione prestadores, registre o preço e avance o fluxo em etapas.
+                  </p>
+                </div>
+                <span className="text-xs text-contrast">
+                  {candidates.length} candidato{candidates.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  value={providerSelectionId}
+                  onChange={(e) => setProviderSelectionId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-dark outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Adicionar prestador à solicitação</option>
+                  {availableProviders.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.users?.full_name ?? provider.id}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddCandidate}
+                  disabled={!providerSelectionId || candidateActioningId !== null}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-heading font-bold text-background hover:bg-primary-dark transition-colors disabled:opacity-50"
+                >
+                  Adicionar
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {candidates.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-contrast">
+                    Nenhum prestador adicionado.
+                  </div>
+                ) : (
+                  candidates.map((candidate) => {
+                    const providerName =
+                      candidate.provider_profiles?.users?.full_name ?? "Prestador";
+                    const candidateStatusLabel =
+                      candidate.status === "accepted"
+                        ? "Aceito"
+                        : candidate.status === "rejected"
+                          ? "Recusado"
+                          : "Pendente";
+                    const canApproveForClient = canAdminApproveServiceForClient(
+                      r.status,
+                      {
+                        status: candidate.status,
+                        admin_approved: candidate.admin_approved,
+                        offered_price: candidate.offered_price,
+                      },
+                    );
+
+                    return (
+                      <div
+                        key={candidate.id}
+                        className="rounded-xl border border-border bg-surface p-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-heading font-bold text-dark">
+                              {providerName}
+                            </p>
+                            <p className="mt-1 text-xs text-contrast">
+                              {candidate.provider_profiles?.users?.phone ?? "Sem telefone"}
+                            </p>
+                          </div>
+                          <span
+                            className="rounded-full px-2 py-1 text-[11px] font-medium"
+                            style={{
+                              backgroundColor: `${candidate.admin_approved ? "#22c55e" : "#f97316"}20`,
+                              color: candidate.admin_approved ? "#22c55e" : "#f97316",
+                            }}
+                          >
+                            {candidateStatusLabel}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={candidatePriceInputs[candidate.id] ?? ""}
+                            onChange={(e) =>
+                              setCandidatePriceInputs((current) => ({
+                                ...current,
+                                [candidate.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Preço do prestador"
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-dark outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateCandidatePrice(candidate)}
+                              disabled={candidateActioningId === candidate.id}
+                              className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-dark hover:bg-background disabled:opacity-50"
+                            >
+                              Preço prestador
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSendKzProposal(candidate)}
+                              disabled={candidateActioningId === candidate.id}
+                              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-background hover:bg-primary-dark disabled:opacity-50"
+                            >
+                              Enviar proposta KZ
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {canApproveForClient && (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveCandidateForClient(candidate)}
+                              disabled={candidateActioningId === candidate.id}
+                              className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-background hover:bg-accent-dark disabled:opacity-50"
+                            >
+                              Cliente: aprovar
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRejectCandidatePrice(candidate)}
+                            disabled={candidateActioningId === candidate.id}
+                            className="rounded-lg border border-danger/30 px-3 py-2 text-xs font-semibold text-danger hover:bg-danger/10 disabled:opacity-50"
+                          >
+                            Recusar preço
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCandidate(candidate)}
+                            disabled={candidateActioningId === candidate.id}
+                            className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-contrast hover:text-dark hover:bg-background disabled:opacity-50"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
 
           {/* ── RIGHT COLUMN (35%) ── */}
@@ -332,6 +730,51 @@ export default function ServiceDetailModal({
             >
               {financialSaving ? "Salvando..." : "Salvar valores"}
             </button>
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-3">
+              <p className="text-xs font-heading font-bold text-contrast uppercase tracking-wider mb-2">
+                Próxima etapa
+              </p>
+              {r.status === "awaiting_provider_confirmation" ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await approveServiceRequestForProvider(r.id);
+                      onUpdate?.();
+                      toast("success", "Prestador: aprovar");
+                    } catch (error) {
+                      console.error(error);
+                      toast("danger", "Erro ao aprovar prestador");
+                    }
+                  }}
+                  className="w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-background hover:bg-accent-dark"
+                >
+                  Prestador: aprovar
+                </button>
+              ) : r.status === "searching_provider" ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await approveServiceRequestForClient(r.id);
+                      onUpdate?.();
+                      toast("success", "Cliente: aprovar");
+                    } catch (error) {
+                      console.error(error);
+                      toast("danger", "Erro ao aprovar cliente");
+                    }
+                  }}
+                  className="w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-background hover:bg-accent-dark"
+                >
+                  Cliente: aprovar
+                </button>
+              ) : (
+                <p className="text-xs text-contrast">
+                  Sem ação automática nesta etapa.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>

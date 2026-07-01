@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { isMissingPostgrestRelationError } from "@/lib/postgrest-errors";
 import { buildDriverMetrics, getDriverMetricPeriodRange } from "@/lib/driver-metrics";
+import { buildServiceCategorySlug } from "@/lib/service-category-utils";
 import { isProviderWithoutDriverProfile } from "@/lib/provider-filters";
 import type {
   User,
@@ -11,11 +12,14 @@ import type {
   TripStatusHistory,
   ServiceRequest,
   ServiceRequestStatus,
+  ServiceRequestProviderCandidate,
+  ServiceRequestProviderCandidateStatus,
   DriverProfile,
   ProviderProfile,
   Vehicle,
   Address,
   ServiceCategory,
+  ServiceTypeEnum,
   ProviderStatus,
   Debito,
   PaymentMethod,
@@ -55,6 +59,7 @@ export async function fetchAdminNotifications(): Promise<Notification[]> {
   const { data, error } = await supabase
     .from("notifications")
     .select("*")
+    .eq("is_read", false)
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) throw error;
@@ -67,6 +72,37 @@ export async function markNotificationRead(id: string): Promise<void> {
     .update({ is_read: true, read_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+}
+
+export async function deleteAdminNotification(id: string): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(
+    `/api/admin-notifications?id=${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: data.session?.access_token
+        ? { Authorization: `Bearer ${data.session.access_token}` }
+        : undefined,
+    },
+  );
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload.error || "Erro ao excluir notificação");
+  }
+}
+
+export async function deleteAllAdminNotifications(): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch("/api/admin-notifications", {
+    method: "DELETE",
+    headers: data.session?.access_token
+      ? { Authorization: `Bearer ${data.session.access_token}` }
+      : undefined,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload.error || "Erro ao limpar notificações");
+  }
 }
 
 // ─── Auth ──────────────────────────────────────────────────
@@ -131,7 +167,7 @@ export async function fetchTrips(): Promise<Trip[]> {
   const query = supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*)",
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
     )
     .order("scheduled_datetime", { ascending: false });
   const { data, error } = await query;
@@ -141,7 +177,7 @@ export async function fetchTrips(): Promise<Trip[]> {
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*)",
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
     )
     .order("scheduled_datetime", { ascending: false });
   if (fallbackError) throw fallbackError;
@@ -152,10 +188,26 @@ export async function fetchTrips(): Promise<Trip[]> {
 export async function fetchServiceRequests(): Promise<ServiceRequest[]> {
   const { data, error } = await supabase
     .from("service_requests")
-    .select("*, service_categories(*), addresses(*), users!client_id(*)")
+    .select(
+      "*, service_categories(*), addresses(*), users!client_id(*), provider_profiles(*, users(*)), service_request_photos(*), service_request_provider_candidates(*, provider_profiles(*, users(*)))",
+    )
     .order("service_date", { ascending: false });
   if (error) throw error;
   return data as ServiceRequest[];
+}
+
+export async function fetchServiceRequestById(
+  id: string,
+): Promise<ServiceRequest> {
+  const { data, error } = await supabase
+    .from("service_requests")
+    .select(
+      "*, service_categories(*), addresses(*), users!client_id(*), provider_profiles(*, users(*)), service_request_photos(*), service_request_provider_candidates(*, provider_profiles(*, users(*)))",
+    )
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return data as ServiceRequest;
 }
 
 // ─── Update Trip Financial ─────────────────────────────────
@@ -308,6 +360,20 @@ export async function fetchTripDriverCandidates(
     .from("trip_driver_candidates")
     .select(tripDriverCandidateSelect)
     .eq("trip_id", tripId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as TripDriverCandidate[];
+}
+
+export async function fetchTripDriverCandidatesForTrips(
+  tripIds: string[],
+): Promise<TripDriverCandidate[]> {
+  if (tripIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .select(tripDriverCandidateSelect)
+    .in("trip_id", tripIds)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as TripDriverCandidate[];
@@ -573,6 +639,196 @@ export async function updateServiceRequestStatus(
     .update({ status })
     .eq("id", id);
   if (error) throw error;
+  logAdminAction("Status do serviço atualizado", id, { status });
+}
+
+export async function approveServiceRequest(id: string): Promise<void> {
+  await updateServiceRequestStatus(id, "searching_provider");
+}
+
+export async function approveServiceRequestForClient(id: string): Promise<void> {
+  await updateServiceRequestStatus(id, "awaiting_client_confirmation");
+}
+
+export async function approveServiceRequestForProvider(
+  id: string,
+): Promise<void> {
+  await updateServiceRequestStatus(id, "awaiting_provider_confirmation");
+}
+
+// ─── Service Request Provider Candidates ───────────────────
+const serviceRequestProviderCandidateSelect =
+  "*, provider_profiles(*, users(*))";
+
+export async function fetchServiceRequestProviderCandidates(
+  serviceRequestId: string,
+): Promise<ServiceRequestProviderCandidate[]> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .select(serviceRequestProviderCandidateSelect)
+    .eq("service_request_id", serviceRequestId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ServiceRequestProviderCandidate[];
+}
+
+export async function addServiceRequestProviderCandidate(
+  serviceRequestId: string,
+  providerProfileId: string,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .insert({
+      service_request_id: serviceRequestId,
+      provider_profile_id: providerProfileId,
+      status: "pending",
+    })
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Prestador adicionado como candidato", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function removeServiceRequestProviderCandidate(
+  serviceRequestId: string,
+  providerProfileId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("service_request_provider_candidates")
+    .delete()
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId);
+  if (error) throw error;
+  logAdminAction("Candidato de serviço removido", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+  });
+}
+
+export async function updateServiceRequestProviderCandidateStatus(
+  serviceRequestId: string,
+  providerProfileId: string,
+  status: ServiceRequestProviderCandidateStatus,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      status,
+      responded_at: status === "pending" ? null : new Date().toISOString(),
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Status do candidato de serviço atualizado", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    status,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function updateServiceRequestProviderCandidatePrice(
+  serviceRequestId: string,
+  providerProfileId: string,
+  offeredPrice: number | null,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      offered_price: offeredPrice,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato de serviço atualizado", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    offered_price: offeredPrice,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function rejectServiceRequestProviderCandidatePrice(
+  serviceRequestId: string,
+  providerProfileId: string,
+): Promise<ServiceRequestProviderCandidate> {
+  const message = "Preço fora do padrão, favor fazer nova proposta";
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      status: "pending",
+      offered_price: null,
+      responded_at: null,
+      price_rejection_reason: message,
+      price_rejected_at: new Date().toISOString(),
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato de serviço recusado", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function sendKzServiceRequestProposal(
+  serviceRequestId: string,
+  providerProfileId: string,
+  price: number,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      status: "pending",
+      offered_price: price,
+      responded_at: null,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: price,
+      kz_proposed_at: new Date().toISOString(),
+      kz_proposal_locked: true,
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Proposta KZ enviada ao candidato de serviço", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    price,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function approveServiceRequestProviderCandidate(
+  serviceRequestId: string,
+  providerProfileId: string,
+  offeredPrice: number,
+): Promise<void> {
+  const { error } = await supabase.rpc("select_service_request_provider", {
+    p_service_request_id: serviceRequestId,
+    p_provider_profile_id: providerProfileId,
+    p_offered_price: offeredPrice,
+  });
+  if (error) throw error;
+  logAdminAction("Prestador aprovado para serviço", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    offered_price: offeredPrice,
+  });
 }
 
 // ─── Driver Profiles ───────────────────────────────────────
@@ -1102,6 +1358,29 @@ export async function fetchServiceCategories(): Promise<ServiceCategory[]> {
   return data as ServiceCategory[];
 }
 
+export async function createServiceCategory(input: {
+  name: string;
+  description?: string | null;
+  icon_url?: string | null;
+  service_type?: ServiceTypeEnum;
+}): Promise<ServiceCategory> {
+  const name = input.name.trim();
+  const { data, error } = await supabase
+    .from("service_categories")
+    .insert({
+      name,
+      slug: buildServiceCategorySlug(name),
+      description: input.description ?? null,
+      service_type: input.service_type ?? "other_service",
+      is_active: true,
+      icon_url: input.icon_url ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as ServiceCategory;
+}
+
 // ─── Addresses ─────────────────────────────────────────────
 export async function createAddress(address: {
   formatted_address: string;
@@ -1219,6 +1498,7 @@ export async function createServiceRequest(req: {
   service_date: string;
   description: string;
   address_id?: string | null;
+  estimated_price?: number | null;
   observations?: string | null;
 }) {
   const { data, error } = await supabase
@@ -1228,6 +1508,20 @@ export async function createServiceRequest(req: {
     .single();
   if (error) throw error;
   return data as ServiceRequest;
+}
+
+export async function addServiceRequestPhoto(photo: {
+  service_request_id: string;
+  photo_url: string;
+  sort_order: number;
+}) {
+  const { data, error } = await supabase
+    .from("service_request_photos")
+    .insert(photo)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 // ─── Create User ───────────────────────────────────────────
