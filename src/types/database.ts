@@ -112,6 +112,13 @@ export interface DriverMetrics {
   averageRating: number;
 }
 
+export interface ClientMetrics {
+  finishedTrips: number;
+  cancelledTrips: number;
+  totalSpent: number;
+  averageRating: number;
+}
+
 export interface Vehicle {
   id: string;
   driver_profile_id: string;
@@ -346,6 +353,26 @@ export interface TripDriverCandidate {
   };
 }
 
+export type TripCancellationRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected";
+
+export interface TripCancellationRequest {
+  id: string;
+  trip_id: string;
+  requested_by: string;
+  reason: string;
+  status: TripCancellationRequestStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  requested_by_user?: Pick<User, "id" | "full_name" | "email" | "phone">;
+  reviewed_by_user?: Pick<User, "id" | "full_name" | "email">;
+}
+
 export interface TripStatusHistory {
   id: string;
   trip_id: string;
@@ -360,6 +387,38 @@ export interface TripStatusHistory {
 export interface DriverTripHistoryEntry {
   trip: Trip;
   ratings: Rating[];
+}
+
+export interface ClientTripHistoryEntry {
+  trip: Trip;
+  ratings: Rating[];
+}
+
+export interface SupportConversation {
+  id: string;
+  provider_user_id: string;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  last_sender_id: string | null;
+  unread_admin_count: number;
+  unread_provider_count: number;
+  created_at: string;
+  updated_at: string;
+  provider?: Pick<
+    User,
+    "id" | "full_name" | "email" | "phone" | "avatar_url" | "is_active"
+  >;
+}
+
+export interface SupportMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  message: string;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+  sender?: Pick<User, "id" | "full_name" | "avatar_url" | "role">;
 }
 
 // Supabase Database type for the client
@@ -377,6 +436,9 @@ export interface Database {
       addresses: { Row: Address };
       trips: { Row: Trip };
       trip_stops: { Row: TripStop };
+      trip_cancellation_requests: { Row: TripCancellationRequest };
+      support_conversations: { Row: SupportConversation };
+      support_messages: { Row: SupportMessage };
       ratings: { Row: Rating };
       notifications: { Row: Notification };
       service_requests: { Row: ServiceRequest };

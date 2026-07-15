@@ -5,6 +5,7 @@ import type {
   Trip,
   TripDriverCandidate,
   TripDriverCandidateStatus,
+  TripCancellationRequest,
   TripStatusHistory,
   DriverProfile,
   DriverTripHistoryEntry,
@@ -18,6 +19,9 @@ import {
   approveTrip,
   rejectTrip,
   cancelTrip,
+  fetchPendingCancellationRequest,
+  approveCancellationRequest,
+  rejectCancellationRequest,
   deleteTrip,
   addTripDriverCandidate,
   removeTripDriverCandidate,
@@ -38,6 +42,7 @@ import {
 import { canAdminApproveForClient } from "@/lib/trip-candidate-actions";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
+import EditTripBasicsModal from "@/components/EditTripBasicsModal";
 import { supabase } from "@/lib/supabase";
 import { formatBrazilDateTime } from "@/lib/brazil-time";
 
@@ -149,6 +154,10 @@ export default function TripDetailModal({
   const [history, setHistory] = useState<TripStatusHistory[]>([]);
   const [candidates, setCandidates] = useState<TripDriverCandidate[]>([]);
   const [allDrivers, setAllDrivers] = useState<DriverProfile[]>([]);
+  const [pendingCancellationRequest, setPendingCancellationRequest] =
+    useState<TripCancellationRequest | null>(null);
+  const [cancellationRequestLoaded, setCancellationRequestLoaded] =
+    useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
   // Status-action state
@@ -178,6 +187,11 @@ export default function TripDetailModal({
   );
   const [driverHistoryLoading, setDriverHistoryLoading] = useState(false);
   const [showClientPhonePopup, setShowClientPhonePopup] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [showCancellationRejectForm, setShowCancellationRejectForm] =
+    useState(false);
+  const [cancellationRejectReason, setCancellationRejectReason] = useState("");
+  const [reviewingCancellation, setReviewingCancellation] = useState(false);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
@@ -218,6 +232,24 @@ export default function TripDetailModal({
         setLiveTrip(freshTrip);
         setHistory(hist);
 
+        try {
+          const cancellationRequest =
+            await fetchPendingCancellationRequest(tripId);
+          setPendingCancellationRequest(cancellationRequest);
+          setCancellationRequestLoaded(true);
+          if (!cancellationRequest) {
+            setShowCancellationRejectForm(false);
+            setCancellationRejectReason("");
+          }
+        } catch {
+          setPendingCancellationRequest(null);
+          setCancellationRequestLoaded(false);
+          toast(
+            "warning",
+            "Não foi possível verificar pedidos de cancelamento",
+          );
+        }
+
         // Tabela pode não existir ainda se a migration não foi aplicada
         try {
           const cands = await fetchTripDriverCandidates(tripId);
@@ -245,6 +277,8 @@ export default function TripDetailModal({
     setHistory([]);
     setCandidates([]);
     setAllDrivers([]);
+    setPendingCancellationRequest(null);
+    setCancellationRequestLoaded(false);
     setShowRejectForm(false);
     setRejectReason("");
     setShowDeleteConfirm(false);
@@ -254,6 +288,9 @@ export default function TripDetailModal({
     setDriverHistoryName(null);
     setDriverHistory([]);
     setShowClientPhonePopup(false);
+    setShowCancellationRejectForm(false);
+    setCancellationRejectReason("");
+    setReviewingCancellation(false);
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
 
@@ -296,6 +333,43 @@ export default function TripDetailModal({
       supabase.removeChannel(channel);
     };
   }, [open, trip]);
+
+  // Realtime subscription: mantém a viagem e o pedido de cancelamento sincronizados.
+  useEffect(() => {
+    if (!open || !trip) return;
+    const channel = supabase
+      .channel(`trip-detail-${trip.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trips",
+          filter: `id=eq.${trip.id}`,
+        },
+        () => {
+          loadTripData(trip.id).catch(() => {});
+          onUpdate();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_cancellation_requests",
+          filter: `trip_id=eq.${trip.id}`,
+        },
+        () => {
+          loadTripData(trip.id).catch(() => {});
+          onUpdate();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, trip, loadTripData, onUpdate]);
 
   // When status changes to searching_drivers, load drivers
   useEffect(() => {
@@ -394,6 +468,51 @@ export default function TripDetailModal({
     }
   }
 
+  async function handleApproveCancellationRequest() {
+    if (!pendingCancellationRequest) return;
+    const confirmed = window.confirm(
+      "Aprovar o pedido e cancelar esta viagem agora?",
+    );
+    if (!confirmed) return;
+
+    setReviewingCancellation(true);
+    try {
+      await approveCancellationRequest(pendingCancellationRequest.id);
+      toast("success", "Cancelamento aprovado e viagem cancelada");
+      onUpdate();
+      await loadTripData(t.id);
+    } catch {
+      toast("danger", "Não foi possível aprovar o cancelamento");
+      await loadTripData(t.id);
+    } finally {
+      setReviewingCancellation(false);
+    }
+  }
+
+  async function handleRejectCancellationRequest() {
+    if (!pendingCancellationRequest) return;
+    const reason = cancellationRejectReason.trim();
+    if (reason.length < 3) {
+      toast("warning", "Informe o motivo da recusa");
+      return;
+    }
+
+    setReviewingCancellation(true);
+    try {
+      await rejectCancellationRequest(pendingCancellationRequest.id, reason);
+      toast("success", "Pedido recusado; a viagem continua ativa");
+      setShowCancellationRejectForm(false);
+      setCancellationRejectReason("");
+      onUpdate();
+      await loadTripData(t.id);
+    } catch {
+      toast("danger", "Não foi possível recusar o cancelamento");
+      await loadTripData(t.id);
+    } finally {
+      setReviewingCancellation(false);
+    }
+  }
+
   async function handleDeleteTrip() {
     if (!t) return;
     setActioning(true);
@@ -454,10 +573,19 @@ export default function TripDetailModal({
     if (!t) return;
     try {
       await removeTripDriverCandidate(t.id, driverProfileId);
-      setCandidates((prev) =>
-        prev.filter((c) => c.driver_profile_id !== driverProfileId),
+      const [updatedCandidates, updatedTrip] = await Promise.all([
+        fetchTripDriverCandidates(t.id),
+        fetchTripById(t.id),
+      ]);
+      setCandidates(updatedCandidates);
+      setLiveTrip(updatedTrip);
+      onUpdate();
+      toast(
+        "success",
+        t.driver_profile_id === driverProfileId
+          ? "Motorista removido. Viagem voltou para buscando motoristas"
+          : "Candidato removido",
       );
-      toast("success", "Candidato removido");
     } catch {
       toast("danger", "Erro ao remover candidato");
     }
@@ -784,7 +912,16 @@ export default function TripDetailModal({
             {/* ── LEFT COLUMN (65%) ── */}
             <div className="px-4 md:px-6 py-5 md:border-r border-border md:overflow-y-auto md:w-[65%]">
               {/* Main Info */}
-              <SectionTitle>Informações da Viagem</SectionTitle>
+              <div className="flex items-center justify-between mt-6 mb-3">
+                <SectionTitle>Informações da Viagem</SectionTitle>
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(true)}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-heading font-bold text-dark hover:border-primary hover:text-primary transition-colors"
+                >
+                  Editar viagem
+                </button>
+              </div>
 
               <InfoRow
                 label="Status"
@@ -1279,11 +1416,96 @@ export default function TripDetailModal({
                 </div>
               )}
 
+              {/* Pending cancellation request */}
+              {pendingCancellationRequest && (
+                <>
+                  <SectionTitle>Pedido de Cancelamento</SectionTitle>
+                  <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                    <p className="text-sm font-heading font-bold text-dark">
+                      {pendingCancellationRequest.requested_by_user?.full_name ??
+                        "Motorista"}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-contrast">
+                      {pendingCancellationRequest.reason}
+                    </p>
+                    <p className="mt-2 text-[11px] text-contrast/70">
+                      Solicitado em {formatDate(pendingCancellationRequest.created_at)}
+                    </p>
+
+                    {!showCancellationRejectForm ? (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={handleApproveCancellationRequest}
+                          disabled={reviewingCancellation}
+                          className="min-h-11 rounded-lg bg-danger px-3 py-2 text-sm font-heading font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {reviewingCancellation ? "Analisando..." : "Aprovar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCancellationRejectForm(true)}
+                          disabled={reviewingCancellation}
+                          className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm font-heading font-bold text-dark transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Recusar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <label
+                          htmlFor="cancellation-reject-reason"
+                          className="mb-1.5 block text-xs font-medium text-dark"
+                        >
+                          Motivo da recusa
+                        </label>
+                        <textarea
+                          id="cancellation-reject-reason"
+                          value={cancellationRejectReason}
+                          onChange={(event) =>
+                            setCancellationRejectReason(event.target.value)
+                          }
+                          rows={3}
+                          placeholder="Explique por que a corrida deve continuar"
+                          className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-dark placeholder:text-contrast/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCancellationRejectForm(false);
+                              setCancellationRejectReason("");
+                            }}
+                            disabled={reviewingCancellation}
+                            className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm text-contrast transition-colors hover:bg-surface-hover hover:text-dark disabled:opacity-50"
+                          >
+                            Voltar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRejectCancellationRequest}
+                            disabled={
+                              reviewingCancellation ||
+                              cancellationRejectReason.trim().length < 3
+                            }
+                            className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-heading font-bold text-background transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {reviewingCancellation
+                              ? "Enviando..."
+                              : "Confirmar recusa"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Confirmed Driver */}
               {t.driver_profiles?.provider_profiles?.users && (
                 <>
                   <SectionTitle>Motorista Confirmado</SectionTitle>
-                  <div className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/30">
+                  <div className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-between gap-3">
                     <button
                       type="button"
                       onClick={() =>
@@ -1299,6 +1521,34 @@ export default function TripDetailModal({
                     >
                       {t.driver_profiles.provider_profiles.users.full_name}
                     </button>
+                    {t.driver_profile_id && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          t.driver_profile_id &&
+                          handleRemoveCandidate(t.driver_profile_id)
+                        }
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                        aria-label="Remover motorista confirmado"
+                        title="Remover motorista confirmado"
+                      >
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -1466,7 +1716,14 @@ export default function TripDetailModal({
               </div>
 
               {/* Danger Zone */}
-              <div className="mt-6 pt-4 border-t border-danger/30">
+              {!loadingData && !cancellationRequestLoaded && (
+                <div className="mt-6 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-contrast">
+                  Revisão de cancelamento indisponível. Atualize a viagem antes
+                  de usar ações administrativas.
+                </div>
+              )}
+              {cancellationRequestLoaded && !pendingCancellationRequest && (
+                <div className="mt-6 pt-4 border-t border-danger/30">
                 <p className="text-xs font-heading font-bold text-danger uppercase tracking-wider mb-3">
                   Zona de Risco
                 </p>
@@ -1508,7 +1765,8 @@ export default function TripDetailModal({
                     </div>
                   </div>
                 )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1707,6 +1965,13 @@ export default function TripDetailModal({
           </div>
         </div>
       )}
+
+      <EditTripBasicsModal
+        trip={t}
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        onSaved={onUpdate}
+      />
     </div>
   );
 }

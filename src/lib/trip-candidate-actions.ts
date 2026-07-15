@@ -14,3 +14,10 @@ export function canAdminApproveForClient(
     candidate.offered_price != null
   );
 }
+
+export function shouldResetTripAfterCandidateRemoval(input: {
+  currentDriverProfileId: string | null | undefined;
+  removedDriverProfileId: string;
+}): boolean {
+  return input.currentDriverProfileId === input.removedDriverProfileId;
+}

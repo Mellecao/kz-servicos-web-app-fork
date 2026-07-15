@@ -160,7 +160,7 @@ export default function AdminNotificationsButton() {
   if (loading || userProfile?.role !== "admin") return null;
 
   return (
-    <div className="fixed bottom-20 right-24 z-40 md:bottom-8 md:right-28">
+    <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-40 md:bottom-8 md:right-8">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

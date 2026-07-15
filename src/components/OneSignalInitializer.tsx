@@ -1,11 +1,33 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { buildAdminNotificationHref } from "@/lib/admin-notification-navigation";
 
 const ONESIGNAL_APP_ID = "ff1d0837-34b0-4cd1-8a8f-a0f82d8c747d";
 const ONESIGNAL_SAFARI_WEB_ID =
   "web.onesignal.auto.34f3144b-3497-4c5c-a43c-a5d9eb9bdd56";
+
+type OneSignalNotificationClickEvent = {
+  notification?: {
+    additionalData?: {
+      reference_type?: string | null;
+      reference_id?: string | null;
+      notification_id?: string | null;
+      type?: string | null;
+    } | null;
+    launchURL?: string | null;
+  };
+  result?: {
+    url?: string | null;
+    actionId?: string | null;
+  };
+};
+
+type OneSignalNotificationClickListener = (
+  event: OneSignalNotificationClickEvent,
+) => void;
 
 type OneSignalSDK = {
   init: (options: Record<string, unknown>) => Promise<void>;
@@ -16,6 +38,14 @@ type OneSignalSDK = {
   };
   Notifications?: {
     requestPermission?: () => Promise<boolean> | boolean;
+    addEventListener?: (
+      event: "click",
+      listener: OneSignalNotificationClickListener,
+    ) => void;
+    removeEventListener?: (
+      event: "click",
+      listener: OneSignalNotificationClickListener,
+    ) => void;
   };
 };
 
@@ -100,6 +130,7 @@ export async function promptOneSignalPushPermission() {
 
 export default function OneSignalInitializer() {
   const { loading, session } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     void initOneSignal().catch((error) => {
@@ -131,6 +162,41 @@ export default function OneSignalInitializer() {
       cancelled = true;
     };
   }, [loading, session?.user.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+
+    void initOneSignal()
+      .then((oneSignal) => {
+        if (!oneSignal || cancelled) return;
+
+        const handleClick = (event: OneSignalNotificationClickEvent) => {
+          const data = event.notification?.additionalData ?? undefined;
+          const href = buildAdminNotificationHref({
+            link: event.notification?.launchURL ?? null,
+            reference_type: data?.reference_type ?? null,
+            reference_id: data?.reference_id ?? null,
+          });
+          if (href) {
+            router.push(href);
+          }
+        };
+
+        oneSignal.Notifications?.addEventListener?.("click", handleClick);
+        cleanup = () => {
+          oneSignal.Notifications?.removeEventListener?.("click", handleClick);
+        };
+      })
+      .catch((error) => {
+        console.error("Erro ao registrar listener de click OneSignal:", error);
+      });
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [router]);
 
   return null;
 }

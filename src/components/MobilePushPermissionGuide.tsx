@@ -102,10 +102,17 @@ export default function MobilePushPermissionGuide() {
             quando uma corrida precisar de ação do admin.
           </p>
           {platform === "ios" && !isStandalone && (
-            <p className="mt-2 text-xs leading-5 text-warning">
-              No iPhone, notificações web só funcionam depois de adicionar o
-              painel à Tela de Início e abrir pelo ícone instalado.
-            </p>
+            <>
+              <p className="mt-2 text-xs leading-5 text-warning">
+                No iPhone, notificações web só funcionam depois de adicionar o
+                painel à Tela de Início e abrir pelo ícone instalado.
+              </p>
+              <p className="mt-2 text-xs leading-5 text-contrast">
+                Ao abrir o app pelo ícone pela primeira vez, será necessário
+                fazer login novamente — o iPhone isola os dados do app
+                instalado do navegador, não é um bug.
+              </p>
+            </>
           )}
           {permission === "denied" && (
             <p className="mt-2 text-xs leading-5 text-danger">

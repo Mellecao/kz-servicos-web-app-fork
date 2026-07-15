@@ -3,13 +3,21 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   deleteUserById,
+  fetchClientPerformance,
   fetchClients,
   fetchRatingsForUser,
   isPublicRating,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { Rating, User } from "@/types/database";
+import type {
+  ClientMetrics,
+  ClientTripHistoryEntry,
+  DriverMetricPeriod,
+  Rating,
+  User,
+} from "@/types/database";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
+import ClientTripHistoryModal from "@/components/ClientTripHistoryModal";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
@@ -64,6 +72,11 @@ export default function ClientesPage() {
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
   );
+  const [historyClient, setHistoryClient] = useState<User | null>(null);
+  const [historyPeriod, setHistoryPeriod] = useState<DriverMetricPeriod>("month");
+  const [historyMetrics, setHistoryMetrics] = useState<ClientMetrics | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<ClientTripHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadClients = useCallback(() => {
     setLoading(true);
@@ -76,6 +89,39 @@ export default function ClientesPage() {
   useEffect(() => {
     loadClients();
   }, [loadClients]);
+
+  useEffect(() => {
+    if (!historyClient) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchClientPerformance(historyClient.id, historyPeriod)
+      .then(({ metrics, history }) => {
+        if (cancelled) return;
+        setHistoryMetrics(metrics);
+        setHistoryEntries(history);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHistoryMetrics(null);
+        setHistoryEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyClient, historyPeriod]);
+
+  const refreshClientHistory = useCallback(() => {
+    if (!historyClient) return;
+    fetchClientPerformance(historyClient.id, historyPeriod)
+      .then(({ metrics, history }) => {
+        setHistoryMetrics(metrics);
+        setHistoryEntries(history);
+      })
+      .catch(() => {});
+  }, [historyClient, historyPeriod]);
 
   async function handleDeleteClient(client: User) {
     const name = client.full_name || client.email;
@@ -217,9 +263,13 @@ export default function ClientesPage() {
                 {getInitials(client.full_name || client.email)}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-dark text-sm truncate">
+                <button
+                  type="button"
+                  onClick={() => setHistoryClient(client)}
+                  className="text-left font-semibold text-dark text-sm truncate hover:text-primary transition-colors"
+                >
                   {client.full_name || "—"}
-                </p>
+                </button>
                 <p className="text-muted text-xs truncate">{client.email}</p>
                 <div className="mt-2">
                   <SavedAddressesSummary client={client} />
@@ -329,9 +379,13 @@ export default function ClientesPage() {
                               .slice(0, 2)}
                           </span>
                         </div>
-                        <span className="text-sm font-medium text-dark">
+                        <button
+                          type="button"
+                          onClick={() => setHistoryClient(client)}
+                          className="text-left text-sm font-medium text-dark hover:text-primary transition-colors"
+                        >
                           {client.full_name}
-                        </span>
+                        </button>
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-contrast">
@@ -431,6 +485,18 @@ export default function ClientesPage() {
           setEditingClient(null);
         }}
         onSuccess={loadClients}
+      />
+
+      <ClientTripHistoryModal
+        client={historyClient}
+        open={!!historyClient}
+        onClose={() => setHistoryClient(null)}
+        metrics={historyMetrics}
+        history={historyEntries}
+        period={historyPeriod}
+        onPeriodChange={setHistoryPeriod}
+        loading={historyLoading}
+        onTripUpdated={refreshClientHistory}
       />
 
       {ratingsClientName && (

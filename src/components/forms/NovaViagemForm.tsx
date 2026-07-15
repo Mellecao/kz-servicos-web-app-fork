@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, type FormEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import SearchableSelect from "@/components/SearchableSelect";
+import AddressAutocompleteWithSuggestions from "@/components/AddressAutocompleteWithSuggestions";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
 import { useToast } from "@/components/Toast";
 import {
   adminCreateTrip,
+  fetchClientAddressHistory,
   fetchUsers,
   fetchServiceCategories,
 } from "@/lib/api";
@@ -15,6 +17,7 @@ import {
   type GooglePlaceAddress,
   useGooglePlacesAutocomplete,
 } from "@/lib/google-places";
+import { extractSavedAddress } from "@/lib/user-saved-addresses";
 import type { User, ServiceCategory, PaymentMethod } from "@/types/database";
 import type { SearchableSelectOption } from "@/components/SearchableSelect";
 
@@ -136,11 +139,47 @@ export default function NovaViagemForm({
   const [luggageObservations, setLuggageObservations] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [observations, setObservations] = useState("");
+  const [pickupHistory, setPickupHistory] = useState<GooglePlaceAddress[]>([]);
+  const [dropoffHistory, setDropoffHistory] = useState<GooglePlaceAddress[]>([]);
 
-  const pickupPlaces = useGooglePlacesAutocomplete();
-  const dropoffPlaces = useGooglePlacesAutocomplete();
-  const pickupDetailsSeqRef = useRef(0);
-  const dropoffDetailsSeqRef = useRef(0);
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === clientId) ?? null,
+    [clients, clientId],
+  );
+  const homeAddress = useMemo(
+    () => extractSavedAddress(selectedClient, "home"),
+    [selectedClient],
+  );
+  const workAddress = useMemo(
+    () => extractSavedAddress(selectedClient, "work"),
+    [selectedClient],
+  );
+
+  useEffect(() => {
+    if (!clientId) {
+      setPickupHistory([]);
+      setDropoffHistory([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      fetchClientAddressHistory(clientId, "pickup"),
+      fetchClientAddressHistory(clientId, "dropoff"),
+    ])
+      .then(([pickups, dropoffs]) => {
+        if (cancelled) return;
+        setPickupHistory(pickups);
+        setDropoffHistory(dropoffs);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPickupHistory([]);
+        setDropoffHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
 
   const loadClients = () => {
     fetchUsers()
@@ -178,8 +217,8 @@ export default function NovaViagemForm({
     setPaymentMethod("");
     setObservations("");
     setSubmitted(false);
-    pickupPlaces.clear();
-    dropoffPlaces.clear();
+    setPickupHistory([]);
+    setDropoffHistory([]);
   }
 
   const clientOptions: SearchableSelectOption[] = clients.map((c) => ({
@@ -305,36 +344,19 @@ export default function NovaViagemForm({
           </div>
 
           {/* Endereço de embarque */}
-          <div>
-            <label className={labelClass}>Endereço de embarque</label>
-            <SearchableSelect
-              options={pickupPlaces.options}
-              value={pickupAddress}
-              onChange={(placeId, label) => {
-                setPickupAddress(label);
-                const requestSeq = ++pickupDetailsSeqRef.current;
-                setPickupPlaceAddress({
-                  formatted_address: label,
-                  google_place_id: placeId,
-                });
-                pickupPlaces.clear();
-                fetchGooglePlaceDetails(placeId, label).then((address) => {
-                  if (requestSeq !== pickupDetailsSeqRef.current) return;
-                  setPickupAddress(address.formatted_address);
-                  setPickupPlaceAddress(address);
-                });
-              }}
-              onSearchChange={(q) => {
-                pickupDetailsSeqRef.current++;
-                setPickupAddress(q);
-                setPickupPlaceAddress(null);
-                pickupPlaces.search(q);
-              }}
-              placeholder="Ex: Rua das Flores, 123 - Centro"
-              error={isFieldInvalid(pickupAddress)}
-              loading={pickupPlaces.loading}
-            />
-          </div>
+          <AddressAutocompleteWithSuggestions
+            label="Endereço de embarque"
+            placeholder="Ex: Rua das Flores, 123 - Centro"
+            value={pickupAddress}
+            error={isFieldInvalid(pickupAddress)}
+            homeAddress={homeAddress}
+            workAddress={workAddress}
+            historyAddresses={pickupHistory}
+            onChange={(address, rawText) => {
+              setPickupAddress(address?.formatted_address ?? rawText);
+              setPickupPlaceAddress(address);
+            }}
+          />
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -377,36 +399,19 @@ export default function NovaViagemForm({
           </div>
 
           {/* Endereço de desembarque */}
-          <div>
-            <label className={labelClass}>Endereço de desembarque</label>
-            <SearchableSelect
-              options={dropoffPlaces.options}
-              value={dropoffAddress}
-              onChange={(placeId, label) => {
-                setDropoffAddress(label);
-                const requestSeq = ++dropoffDetailsSeqRef.current;
-                setDropoffPlaceAddress({
-                  formatted_address: label,
-                  google_place_id: placeId,
-                });
-                dropoffPlaces.clear();
-                fetchGooglePlaceDetails(placeId, label).then((address) => {
-                  if (requestSeq !== dropoffDetailsSeqRef.current) return;
-                  setDropoffAddress(address.formatted_address);
-                  setDropoffPlaceAddress(address);
-                });
-              }}
-              onSearchChange={(q) => {
-                dropoffDetailsSeqRef.current++;
-                setDropoffAddress(q);
-                setDropoffPlaceAddress(null);
-                dropoffPlaces.search(q);
-              }}
-              placeholder="Ex: Aeroporto Internacional"
-              error={isFieldInvalid(dropoffAddress)}
-              loading={dropoffPlaces.loading}
-            />
-          </div>
+          <AddressAutocompleteWithSuggestions
+            label="Endereço de desembarque"
+            placeholder="Ex: Aeroporto Internacional"
+            value={dropoffAddress}
+            error={isFieldInvalid(dropoffAddress)}
+            homeAddress={homeAddress}
+            workAddress={workAddress}
+            historyAddresses={dropoffHistory}
+            onChange={(address, rawText) => {
+              setDropoffAddress(address?.formatted_address ?? rawText);
+              setDropoffPlaceAddress(address);
+            }}
+          />
 
           {/* Data/hora */}
           <div>

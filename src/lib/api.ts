@@ -1,14 +1,18 @@
 import { supabase } from "@/lib/supabase";
 import { isMissingPostgrestRelationError } from "@/lib/postgrest-errors";
 import { buildDriverMetrics, getDriverMetricPeriodRange } from "@/lib/driver-metrics";
+import { buildClientMetrics, getClientMetricPeriodRange } from "@/lib/client-metrics";
 import { buildServiceCategorySlug } from "@/lib/service-category-utils";
 import { isProviderWithoutDriverProfile } from "@/lib/provider-filters";
+import { shouldResetTripAfterCandidateRemoval } from "@/lib/trip-candidate-actions";
+import type { GooglePlaceAddress } from "@/lib/google-places";
 import type {
   User,
   Trip,
   TripStatus,
   TripDriverCandidate,
   TripDriverCandidateStatus,
+  TripCancellationRequest,
   TripStatusHistory,
   ServiceRequest,
   ServiceRequestStatus,
@@ -28,7 +32,12 @@ import type {
   DriverTripHistoryEntry,
   DriverMetricPeriod,
   DriverMetrics,
+  ClientMetrics,
+  ClientTripHistoryEntry,
   Notification,
+  SupportConversation,
+  SupportMessage,
+  UserSavedAddress,
 } from "@/types/database";
 
 // ─── Admin Logs ────────────────────────────────────────────
@@ -260,6 +269,74 @@ export async function updateTripStatus(
   logAdminAction("Status atualizado", id, { status });
 }
 
+// ─── Admin Update Trip Basics (address, datetime) ─────────
+export async function adminUpdateTripBasics(
+  tripId: string,
+  updates: {
+    pickup?: GooglePlaceAddress;
+    dropoff?: GooglePlaceAddress;
+    scheduled_datetime?: string;
+  },
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+
+  if (updates.pickup) {
+    const { data, error } = await supabase
+      .from("addresses")
+      .insert({
+        formatted_address: updates.pickup.formatted_address,
+        google_place_id: updates.pickup.google_place_id ?? null,
+        latitude: updates.pickup.latitude ?? null,
+        longitude: updates.pickup.longitude ?? null,
+        street: updates.pickup.street ?? null,
+        number: updates.pickup.number ?? null,
+        neighborhood: updates.pickup.neighborhood ?? null,
+        city: updates.pickup.city ?? null,
+        state: updates.pickup.state ?? null,
+        zip_code: updates.pickup.zip_code ?? null,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw error ?? new Error("pickup insert failed");
+    payload.pickup_address_id = data.id;
+  }
+
+  if (updates.dropoff) {
+    const { data, error } = await supabase
+      .from("addresses")
+      .insert({
+        formatted_address: updates.dropoff.formatted_address,
+        google_place_id: updates.dropoff.google_place_id ?? null,
+        latitude: updates.dropoff.latitude ?? null,
+        longitude: updates.dropoff.longitude ?? null,
+        street: updates.dropoff.street ?? null,
+        number: updates.dropoff.number ?? null,
+        neighborhood: updates.dropoff.neighborhood ?? null,
+        city: updates.dropoff.city ?? null,
+        state: updates.dropoff.state ?? null,
+        zip_code: updates.dropoff.zip_code ?? null,
+      })
+      .select("id")
+      .single();
+    if (error || !data) throw error ?? new Error("dropoff insert failed");
+    payload.dropoff_address_id = data.id;
+  }
+
+  if (updates.scheduled_datetime) {
+    payload.scheduled_datetime = updates.scheduled_datetime;
+  }
+
+  if (Object.keys(payload).length === 0) return;
+
+  const { error: updateError } = await supabase
+    .from("trips")
+    .update(payload)
+    .eq("id", tripId);
+  if (updateError) throw updateError;
+
+  logAdminAction("Viagem editada", tripId, payload);
+}
+
 export async function deleteTrip(id: string): Promise<void> {
   const { data } = await supabase.auth.getSession();
   const res = await fetch(`/api/trips?id=${encodeURIComponent(id)}`, {
@@ -349,6 +426,146 @@ export async function cancelTrip(id: string): Promise<void> {
   logAdminAction("Viagem cancelada", id, {});
 }
 
+// ─── Trip Cancellation Requests ──────────────────────────
+const tripCancellationRequestSelect =
+  "*, requested_by_user:users!requested_by(id, full_name, email, phone), reviewed_by_user:users!reviewed_by(id, full_name, email)";
+
+export async function fetchPendingCancellationRequest(
+  tripId: string,
+): Promise<TripCancellationRequest | null> {
+  const { data, error } = await supabase
+    .from("trip_cancellation_requests")
+    .select(tripCancellationRequestSelect)
+    .eq("trip_id", tripId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) throw error;
+  return (data as TripCancellationRequest | null) ?? null;
+}
+
+export async function approveCancellationRequest(
+  requestId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("trip_cancellation_requests")
+    .update({ status: "approved" })
+    .eq("id", requestId)
+    .eq("status", "pending")
+    .select("id, trip_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Solicitação já analisada");
+  logAdminAction("Cancelamento aprovado", data.trip_id, {
+    cancellation_request_id: data.id,
+  });
+}
+
+export async function rejectCancellationRequest(
+  requestId: string,
+  reason: string,
+): Promise<void> {
+  const reviewReason = reason.trim();
+  if (reviewReason.length < 3) {
+    throw new Error("Informe o motivo da recusa");
+  }
+
+  const { data, error } = await supabase
+    .from("trip_cancellation_requests")
+    .update({ status: "rejected", review_reason: reviewReason })
+    .eq("id", requestId)
+    .eq("status", "pending")
+    .select("id, trip_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Solicitação já analisada");
+  logAdminAction("Cancelamento recusado", data.trip_id, {
+    cancellation_request_id: data.id,
+    reason: reviewReason,
+  });
+}
+
+// ─── KZ Support Chat ─────────────────────────────────────
+const supportConversationSelect =
+  "*, provider:users!provider_user_id(id, full_name, email, phone, avatar_url, is_active)";
+const supportMessageSelect =
+  "*, sender:users!sender_id(id, full_name, avatar_url, role)";
+
+export async function fetchSupportConversations(): Promise<
+  SupportConversation[]
+> {
+  const { data, error } = await supabase
+    .from("support_conversations")
+    .select(supportConversationSelect)
+    .not("last_message_at", "is", null)
+    .order("last_message_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SupportConversation[];
+}
+
+export async function fetchSupportConversationByProvider(
+  providerUserId: string,
+): Promise<SupportConversation | null> {
+  const { data, error } = await supabase
+    .from("support_conversations")
+    .select(supportConversationSelect)
+    .eq("provider_user_id", providerUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SupportConversation | null) ?? null;
+}
+
+export async function fetchSupportMessages(
+  conversationId: string,
+  options: { before?: string; limit?: number } = {},
+): Promise<SupportMessage[]> {
+  const limit = options.limit ?? 50;
+  let query = supabase
+    .from("support_messages")
+    .select(supportMessageSelect)
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (options.before) {
+    query = query.lt("created_at", options.before);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return ((data ?? []) as SupportMessage[]).reverse();
+}
+
+export async function sendSupportMessage(
+  conversationId: string,
+  senderId: string,
+  message: string,
+): Promise<void> {
+  const cleanMessage = message.trim();
+  if (!cleanMessage || cleanMessage.length > 4000) {
+    throw new Error("A mensagem deve ter entre 1 e 4000 caracteres");
+  }
+
+  const { error } = await supabase.from("support_messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    message: cleanMessage,
+  });
+  if (error) throw error;
+}
+
+export async function markSupportMessagesRead(
+  conversationId: string,
+  readerId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("support_messages")
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .neq("sender_id", readerId)
+    .eq("is_read", false);
+  if (error) throw error;
+}
+
 // ─── Trip Driver Candidates ────────────────────────────────
 const tripDriverCandidateSelect =
   "*, driver_profiles(*, provider_profiles(*, users(*)))";
@@ -403,12 +620,37 @@ export async function removeTripDriverCandidate(
   tripId: string,
   driverProfileId: string,
 ): Promise<void> {
+  const { data: trip, error: tripError } = await supabase
+    .from("trips")
+    .select("driver_profile_id")
+    .eq("id", tripId)
+    .single();
+  if (tripError) throw tripError;
+
   const { error } = await supabase
     .from("trip_driver_candidates")
     .delete()
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
+
+  if (
+    shouldResetTripAfterCandidateRemoval({
+      currentDriverProfileId: trip?.driver_profile_id,
+      removedDriverProfileId: driverProfileId,
+    })
+  ) {
+    const { error: resetError } = await supabase
+      .from("trips")
+      .update({
+        driver_profile_id: null,
+        final_price: null,
+        status: "searching_drivers",
+      })
+      .eq("id", tripId);
+    if (resetError) throw resetError;
+  }
+
   logAdminAction("Candidato removido", tripId, {
     driver_profile_id: driverProfileId,
   });
@@ -1399,6 +1641,203 @@ export async function createAddress(address: {
     .single();
   if (error) throw error;
   return data as Address;
+}
+
+// ─── User Saved Addresses ─────────────────────────────────
+export async function fetchUserSavedAddresses(
+  userId: string,
+): Promise<UserSavedAddress[]> {
+  const { data, error } = await supabase
+    .from("user_saved_addresses")
+    .select("*, addresses(*)")
+    .eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []) as UserSavedAddress[];
+}
+
+export async function saveUserSavedAddress(
+  userId: string,
+  label: "home" | "work",
+  address: GooglePlaceAddress,
+): Promise<void> {
+  const { data: newAddress, error: addressError } = await supabase
+    .from("addresses")
+    .insert({
+      formatted_address: address.formatted_address,
+      google_place_id: address.google_place_id ?? null,
+      latitude: address.latitude ?? null,
+      longitude: address.longitude ?? null,
+      street: address.street ?? null,
+      number: address.number ?? null,
+      neighborhood: address.neighborhood ?? null,
+      city: address.city ?? null,
+      state: address.state ?? null,
+      zip_code: address.zip_code ?? null,
+    })
+    .select("id")
+    .single();
+  if (addressError || !newAddress) {
+    throw addressError ?? new Error("addresses insert failed");
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("user_saved_addresses")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("label", label)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    const { error: updateError } = await supabase
+      .from("user_saved_addresses")
+      .update({
+        address_id: newAddress.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+    if (updateError) throw updateError;
+  } else {
+    const { error: insertError } = await supabase
+      .from("user_saved_addresses")
+      .insert({
+        user_id: userId,
+        address_id: newAddress.id,
+        label,
+      });
+    if (insertError) throw insertError;
+  }
+}
+
+export async function removeUserSavedAddress(
+  userId: string,
+  label: "home" | "work",
+): Promise<void> {
+  const { error } = await supabase
+    .from("user_saved_addresses")
+    .delete()
+    .eq("user_id", userId)
+    .eq("label", label);
+  if (error) throw error;
+}
+
+export async function fetchClientAddressHistory(
+  clientId: string,
+  field: "pickup" | "dropoff",
+  limit = 4,
+): Promise<GooglePlaceAddress[]> {
+  const { data, error } = await supabase
+    .from("trips")
+    .select(
+      "id, created_at, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*)",
+    )
+    .eq("client_id", clientId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+
+  const addresses: GooglePlaceAddress[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data ?? []) {
+    const rawUnknown =
+      field === "pickup" ? row.pickup_address : row.dropoff_address;
+    const raw = (
+      Array.isArray(rawUnknown) ? rawUnknown[0] : rawUnknown
+    ) as Address | null | undefined;
+    if (!raw) continue;
+    const key = raw.google_place_id ?? raw.formatted_address;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    addresses.push({
+      formatted_address: raw.formatted_address,
+      google_place_id: raw.google_place_id,
+      latitude: raw.latitude,
+      longitude: raw.longitude,
+      street: raw.street,
+      number: raw.number,
+      neighborhood: raw.neighborhood,
+      city: raw.city,
+      state: raw.state,
+      zip_code: raw.zip_code,
+    });
+    if (addresses.length >= limit) break;
+  }
+
+  return addresses;
+}
+
+export async function fetchClientPerformance(
+  clientId: string,
+  period: DriverMetricPeriod,
+): Promise<{ metrics: ClientMetrics; history: ClientTripHistoryEntry[] }> {
+  const range = getClientMetricPeriodRange(period);
+  const rangeStart = range.start.toISOString();
+
+  const [tripsResult, ratingsResult] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(
+        "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+      )
+      .eq("client_id", clientId)
+      .gte("updated_at", rangeStart)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("ratings")
+      .select(
+        "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+      )
+      .eq("rated_id", clientId)
+      .gte("created_at", rangeStart)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (tripsResult.error) throw tripsResult.error;
+  if (ratingsResult.error) throw ratingsResult.error;
+
+  const tripRows = (tripsResult.data ?? []) as Trip[];
+  const ratings = (ratingsResult.data ?? []) as Rating[];
+
+  const metrics = buildClientMetrics({
+    clientId,
+    range,
+    trips: tripRows.map((trip) => ({
+      id: trip.id,
+      status: trip.status,
+      client_id: trip.client_id,
+      final_price: trip.final_price,
+      estimated_price: trip.estimated_price,
+      finished_at: trip.finished_at,
+      cancelled_at: trip.cancelled_at,
+      updated_at: trip.updated_at,
+      scheduled_datetime: trip.scheduled_datetime,
+    })),
+    ratings: ratings.map((rating) => ({
+      id: rating.id,
+      rated_id: rating.rated_id,
+      rating: Number(rating.rating),
+      created_at: rating.created_at,
+    })),
+  });
+
+  const ratingsByTrip = new Map<string, Rating[]>();
+  for (const rating of ratings) {
+    if (!rating.trip_id) continue;
+    ratingsByTrip.set(rating.trip_id, [
+      ...(ratingsByTrip.get(rating.trip_id) ?? []),
+      rating,
+    ]);
+  }
+
+  return {
+    metrics,
+    history: tripRows.map((trip) => ({
+      trip,
+      ratings: ratingsByTrip.get(trip.id) ?? [],
+    })),
+  };
 }
 
 // ─── Admin Create Trip (via server route, bypasses RLS) ───

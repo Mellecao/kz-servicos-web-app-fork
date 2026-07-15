@@ -42,6 +42,16 @@ function FinanceIcon() {
   );
 }
 
+function ChatIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+      <path d="M8 9h8" />
+      <path d="M8 13h5" />
+    </svg>
+  );
+}
+
 function MenuIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -119,8 +129,8 @@ function LogoutIcon() {
 const tabItems = [
   { href: "/dashboard", label: "Home", icon: <HomeIcon /> },
   { href: "/viagens", label: "Viagens", icon: <PlaneIcon /> },
+  { href: "/chats", label: "Chats", icon: <ChatIcon /> },
   { href: "/outros-servicos", label: "Serviços", icon: <WrenchIcon /> },
-  { href: "/financeiro", label: "Financeiro", icon: <FinanceIcon /> },
 ];
 
 // --- Drawer secondary nav tiles ---
@@ -138,6 +148,7 @@ function LogsIcon() {
 }
 
 const drawerItems = [
+  { href: "/financeiro", label: "Financeiro", icon: <FinanceIcon /> },
   { href: "/clientes", label: "Clientes", icon: <ClientesIcon /> },
   { href: "/motoristas", label: "Motoristas", icon: <MotoristasIcon /> },
   { href: "/prestadores", label: "Prestadores", icon: <PrestadoresIcon /> },
@@ -210,7 +221,8 @@ export default function MobileNav() {
       {/* Bottom Tab Bar */}
       <nav className="fixed bottom-0 inset-x-0 z-40 flex md:hidden h-14 bg-surface border-t border-border">
         {tabItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
@@ -267,7 +279,8 @@ export default function MobileNav() {
             {/* 2×2 grid of secondary nav tiles */}
             <div className="grid grid-cols-2 gap-3 mb-6">
               {drawerItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
                     key={item.href}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { buildAdminNotificationHref } from "@/lib/admin-notification-navigation";
 
 const ONESIGNAL_APP_ID =
   process.env.ONESIGNAL_APP_ID ?? "ff1d0837-34b0-4cd1-8a8f-a0f82d8c747d";
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       target_channel: "push",
       headings: { pt: notification.title, en: notification.title },
       contents: { pt: notification.body, en: notification.body },
-      url: notification.link ?? undefined,
+      url: buildAdminNotificationHref(notification) ?? undefined,
       data: {
         notification_id: notification.id,
         reference_type: notification.reference_type,

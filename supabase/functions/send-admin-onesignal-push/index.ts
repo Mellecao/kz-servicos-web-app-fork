@@ -15,6 +15,20 @@ interface RequestPayload {
   new_record?: AdminNotificationRecord;
 }
 
+// keep in sync with src/lib/admin-notification-navigation.ts
+function buildAdminNotificationHref(
+  notification: Pick<AdminNotificationRecord, "link" | "reference_type" | "reference_id">,
+): string | null {
+  if (
+    notification.link === "/viagens" &&
+    notification.reference_type === "trip" &&
+    notification.reference_id
+  ) {
+    return `/viagens?openTrip=${encodeURIComponent(notification.reference_id)}`;
+  }
+  return notification.link ?? null;
+}
+
 class SupabaseRestClient {
   constructor(
     private readonly baseUrl: string,
@@ -120,7 +134,7 @@ Deno.serve(async (req: Request) => {
       target_channel: "push",
       headings: { pt: notification.title, en: notification.title },
       contents: { pt: notification.body, en: notification.body },
-      url: notification.link ?? undefined,
+      url: buildAdminNotificationHref(notification) ?? undefined,
       data: {
         notification_id: notification.id,
         reference_type: notification.reference_type,

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canAdminApproveForClient } from "./trip-candidate-actions.ts";
+import {
+  canAdminApproveForClient,
+  shouldResetTripAfterCandidateRemoval,
+} from "./trip-candidate-actions.ts";
 
 const eligibleCandidate = {
   status: "accepted" as const,
@@ -38,6 +41,36 @@ test("hides client approval when the proposal has no price", () => {
 test("hides client approval outside the searching drivers stage", () => {
   assert.equal(
     canAdminApproveForClient("awaiting_client_confirmation", eligibleCandidate),
+    false
+  );
+});
+
+test("resets trip search when removing the confirmed driver", () => {
+  assert.equal(
+    shouldResetTripAfterCandidateRemoval({
+      currentDriverProfileId: "driver-1",
+      removedDriverProfileId: "driver-1",
+    }),
+    true
+  );
+});
+
+test("does not reset trip search when removing another candidate", () => {
+  assert.equal(
+    shouldResetTripAfterCandidateRemoval({
+      currentDriverProfileId: "driver-1",
+      removedDriverProfileId: "driver-2",
+    }),
+    false
+  );
+});
+
+test("does not reset trip search when trip has no confirmed driver", () => {
+  assert.equal(
+    shouldResetTripAfterCandidateRemoval({
+      currentDriverProfileId: null,
+      removedDriverProfileId: "driver-1",
+    }),
     false
   );
 });

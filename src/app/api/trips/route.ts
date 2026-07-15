@@ -69,6 +69,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: dropoffResult.error.message }, { status: 400 });
     }
 
+    // Create stop addresses before the trip so a failure here leaves no orphan trip
+    const stopAddressIds: string[] = [];
+    for (const stopAddress of normalizedStops) {
+      const { data: addressData, error: addressError } = await admin
+        .from("addresses")
+        .insert(stopAddress)
+        .select("id")
+        .single();
+      if (addressError) {
+        return NextResponse.json({ error: addressError.message }, { status: 400 });
+      }
+      stopAddressIds.push(addressData.id);
+    }
+
     const { data, error } = await admin
       .from("trips")
       .insert({
@@ -93,27 +107,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    if (normalizedStops.length > 0) {
-      const stopRows = [];
-      for (let index = 0; index < normalizedStops.length; index += 1) {
-        const stopAddress = normalizedStops[index];
-        const { data: addressData, error: addressError } = await admin
-          .from("addresses")
-          .insert(stopAddress)
-          .select("id")
-          .single();
-        if (addressError) {
-          return NextResponse.json({ error: addressError.message }, { status: 400 });
-        }
-        stopRows.push({
-          trip_id: data.id,
-          address_id: addressData.id,
-          stop_order: index + 1,
-        });
-      }
+    if (stopAddressIds.length > 0) {
+      const stopRows = stopAddressIds.map((addressId, index) => ({
+        trip_id: data.id,
+        address_id: addressId,
+        stop_order: index + 1,
+      }));
 
       const { error: stopsError } = await admin.from("trip_stops").insert(stopRows);
       if (stopsError) {
+        // Rollback: remove the trip so the user doesn't see a half-created record
+        await admin.from("trips").delete().eq("id", data.id);
         return NextResponse.json({ error: stopsError.message }, { status: 400 });
       }
     }

@@ -254,7 +254,7 @@ export default function ViagensPage() {
       cards: colTrips.map((t) => ({
         id: t.id,
         title: `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`,
-        subtitle: `${t.users?.full_name ?? "—"} • ${t.passenger_count} passageiro${t.passenger_count !== 1 ? "s" : ""}`,
+        subtitle: `${t.users?.full_name ?? "—"} • Motorista: ${t.driver_profiles?.provider_profiles?.users?.full_name ?? "Sem motorista"} • ${t.passenger_count} passageiro${t.passenger_count !== 1 ? "s" : ""}`,
         date: formatDate(t.scheduled_datetime),
         ...(t.is_round_trip ? { tag: "Ida e volta", tagColor: "#2261FE" } : {}),
         ...(t.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),

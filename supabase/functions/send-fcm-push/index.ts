@@ -12,18 +12,28 @@ import {
 interface NewRecord {
   id: string;
   status?: string;
+  trip_id?: string | null;
+  requested_by?: string | null;
+  review_reason?: string | null;
   client_id?: string;
   driver_profile_id?: string | null;
   provider_profile_id?: string | null;
   pickup_address_id?: string | null;
   dropoff_address_id?: string | null;
   chat_room_id?: string | null;
+  conversation_id?: string | null;
   sender_id?: string | null;
   message?: string | null;
 }
 
 interface RequestPayload {
-  table: 'trips' | 'service_requests' | 'trip_driver_candidates' | 'chat_messages';
+  table:
+    | 'trips'
+    | 'service_requests'
+    | 'trip_driver_candidates'
+    | 'trip_cancellation_requests'
+    | 'support_messages'
+    | 'chat_messages';
   event: string;
   old_status?: string;
   new_record: NewRecord;
@@ -45,8 +55,10 @@ interface NotificationSpec {
   tripId?: string;
   serviceRequestId?: string;
   chatRoomId?: string;
+  supportConversationId?: string;
   senderName?: string;
   messagePreview?: string;
+  reviewReason?: string;
 }
 
 interface QueryResult<T> {
@@ -795,6 +807,77 @@ async function resolveChatMessageNotification(
   };
 }
 
+async function resolveTripCancellationRequestNotification(
+  supabase: SupabaseRestClient,
+  record: NewRecord,
+): Promise<NotificationSpec | null> {
+  if (
+    record.status !== 'rejected' ||
+    !record.trip_id ||
+    !record.requested_by
+  ) {
+    return null;
+  }
+
+  const target = await getUserPushTarget(
+    supabase,
+    record.requested_by,
+    'driver',
+  );
+  if (!target) return null;
+
+  const reason = record.review_reason?.trim() ?? '';
+  return {
+    targets: [target],
+    title: 'Cancelamento recusado',
+    body: reason
+      ? `A KZ recusou a solicitacao. Motivo: ${reason}`
+      : 'A KZ recusou a solicitacao. A corrida continua ativa.',
+    dataType: 'trip_cancellation_rejected',
+    persistent: false,
+    tripId: record.trip_id,
+    reviewReason: reason || undefined,
+  };
+}
+
+async function resolveSupportMessageNotification(
+  supabase: SupabaseRestClient,
+  record: NewRecord,
+): Promise<NotificationSpec | null> {
+  if (!record.conversation_id || !record.sender_id) return null;
+
+  const { data: conversation } = await supabase
+    .from('support_conversations')
+    .select('id, provider_user_id')
+    .eq('id', record.conversation_id)
+    .single<{ id: string; provider_user_id?: string | null }>();
+
+  const providerUserId = conversation?.provider_user_id;
+  if (!providerUserId || providerUserId === record.sender_id) return null;
+
+  const target = await getUserPushTarget(
+    supabase,
+    providerUserId,
+    'provider',
+  );
+  if (!target) return null;
+
+  const cleanMessage = (record.message ?? '').replace(/\s+/g, ' ').trim();
+  const preview = cleanMessage.length > 120
+    ? `${cleanMessage.slice(0, 117)}...`
+    : cleanMessage || 'Voce recebeu uma nova mensagem.';
+
+  return {
+    targets: [target],
+    title: 'Nova mensagem da KZ',
+    body: preview,
+    dataType: 'support_message',
+    persistent: false,
+    supportConversationId: record.conversation_id,
+    messagePreview: preview,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch helper
 // ---------------------------------------------------------------------------
@@ -811,11 +894,17 @@ async function dispatchSpecs(
   const results: { ok: boolean; invalidToken?: boolean; error?: string }[] = [];
 
   for (const spec of specs) {
-    const entityId = spec.tripId ?? spec.serviceRequestId ?? spec.chatRoomId ?? '';
+    const entityId = spec.tripId
+      ?? spec.serviceRequestId
+      ?? spec.supportConversationId
+      ?? spec.chatRoomId
+      ?? '';
     const entityKey = spec.tripId
       ? 'trip_id'
       : spec.serviceRequestId
       ? 'service_request_id'
+      : spec.supportConversationId
+      ? 'support_conversation_id'
       : 'room_id';
 
     const dataPayload: Record<string, string> = {
@@ -825,6 +914,7 @@ async function dispatchSpecs(
     };
     if (spec.senderName) dataPayload.sender_name = spec.senderName;
     if (spec.messagePreview) dataPayload.message = spec.messagePreview;
+    if (spec.reviewReason) dataPayload.reason = spec.reviewReason;
 
     for (const target of spec.targets) {
       const result = await sendFCMMessage(
@@ -951,6 +1041,13 @@ Deno.serve(async (req: Request) => {
       resolved = await resolveServiceRequestNotification(supabase, new_record);
     } else if (table === 'trip_driver_candidates') {
       resolved = await resolveCandidateInsertNotification(supabase, new_record);
+    } else if (table === 'trip_cancellation_requests') {
+      resolved = await resolveTripCancellationRequestNotification(
+        supabase,
+        new_record,
+      );
+    } else if (table === 'support_messages') {
+      resolved = await resolveSupportMessageNotification(supabase, new_record);
     } else if (table === 'chat_messages') {
       resolved = await resolveChatMessageNotification(supabase, new_record);
     }
