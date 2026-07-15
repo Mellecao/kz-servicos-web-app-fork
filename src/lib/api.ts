@@ -19,6 +19,7 @@ import type {
   ServiceRequestProviderCandidate,
   ServiceRequestProviderCandidateStatus,
   DriverProfile,
+  DriverRegion,
   ProviderProfile,
   Vehicle,
   Address,
@@ -1172,7 +1173,7 @@ export async function fetchDebitos(): Promise<Debito[]> {
 export async function fetchDriverProfiles(): Promise<DriverProfile[]> {
   const { data, error } = await supabase
     .from("driver_profiles")
-    .select("*, provider_profiles(*, users(*)), driver_profile_photos(*), driver_profile_regions(*, driver_regions(*))");
+    .select("*, provider_profiles(*, users(*)), driver_profile_photos(*), driver_profile_regions(*, driver_regions(*)), vehicles(*)");
   if (error) throw error;
   return data as DriverProfile[];
 }
@@ -1186,6 +1187,53 @@ export async function fetchVehiclesByDriver(
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
   return data as Vehicle[];
+}
+
+export async function fetchDriverRegions(): Promise<DriverRegion[]> {
+  const { data, error } = await supabase
+    .from("driver_regions")
+    .select("*")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as DriverRegion[];
+}
+
+export async function createDriverRegion(name: string): Promise<DriverRegion> {
+  const cleanName = name.trim().replace(/\s+/g, " ");
+  if (cleanName.length < 2) throw new Error("Informe uma região com ao menos 2 caracteres");
+  const { data, error } = await supabase
+    .from("driver_regions")
+    .insert({ name: cleanName })
+    .select()
+    .single();
+  if (!error) return data as DriverRegion;
+
+  const { data: existing, error: existingError } = await supabase
+    .from("driver_regions")
+    .select("*")
+    .eq("normalized_name", cleanName.toLowerCase())
+    .single();
+  if (existingError) throw error;
+  return existing as DriverRegion;
+}
+
+export async function replaceDriverProfileRegions(
+  driverProfileId: string,
+  regionIds: string[],
+): Promise<void> {
+  const { error: deleteError } = await supabase
+    .from("driver_profile_regions")
+    .delete()
+    .eq("driver_profile_id", driverProfileId);
+  if (deleteError) throw deleteError;
+  if (regionIds.length === 0) return;
+  const { error: insertError } = await supabase
+    .from("driver_profile_regions")
+    .insert(regionIds.map((regionId) => ({
+      driver_profile_id: driverProfileId,
+      region_id: regionId,
+    })));
+  if (insertError) throw insertError;
 }
 
 export async function deleteDriverProfilePhoto(id: string): Promise<void> {

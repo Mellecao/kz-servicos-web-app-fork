@@ -104,6 +104,12 @@ const candidateStatusColors: Record<
   rejected: { bg: "#ef444420", text: "#ef4444" },
 };
 
+const vehicleCategoryLabels = {
+  simple: "Simples",
+  popular: "Popular",
+  luxury: "Luxo",
+} as const;
+
 function formatDate(dateStr: string) {
   return formatBrazilDateTime(dateStr);
 }
@@ -174,6 +180,10 @@ export default function TripDetailModal({
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
   const [addingAllDrivers, setAddingAllDrivers] = useState(false);
+  const [driverCategoryFilter, setDriverCategoryFilter] = useState<
+    "" | "simple" | "popular" | "luxury"
+  >("");
+  const [driverRegionFilter, setDriverRegionFilter] = useState("");
   const [nearbyDrivers, setNearbyDrivers] = useState<
     Array<{ driver_profile_id: string; distance_meters: number }>
   >([]);
@@ -428,8 +438,24 @@ export default function TripDetailModal({
   const candidateDriverIds = new Set(
     candidates.map((c) => c.driver_profile_id),
   );
+  const regionOptions = Array.from(
+    new Map(
+      allDrivers.flatMap((driver) =>
+        (driver.driver_profile_regions ?? [])
+          .map((item) => item.driver_regions)
+          .filter((region): region is NonNullable<typeof region> => Boolean(region))
+          .map((region) => [region.id, region] as const),
+      ),
+    ).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
   const availableDrivers = allDrivers
-    .filter((d) => !candidateDriverIds.has(d.id))
+    .filter((d) => {
+      if (candidateDriverIds.has(d.id)) return false;
+      const activeVehicle = d.vehicles?.find((vehicle) => vehicle.is_active) ?? d.vehicles?.[0];
+      if (driverCategoryFilter && activeVehicle?.category !== driverCategoryFilter) return false;
+      if (driverRegionFilter && !(d.driver_profile_regions ?? []).some((item) => item.region_id === driverRegionFilter)) return false;
+      return true;
+    })
     .map((d) => ({
       value: d.id,
       label: d.provider_profiles?.users?.full_name ?? d.id,
@@ -1183,6 +1209,30 @@ export default function TripDetailModal({
               {/* Search input — visible only in searching_drivers */}
               {t.status === "searching_drivers" && (
                 <div className="mb-3 flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={driverCategoryFilter}
+                      onChange={(event) => setDriverCategoryFilter(event.target.value as "" | "simple" | "popular" | "luxury")}
+                      className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-dark"
+                      aria-label="Filtrar por categoria do carro"
+                    >
+                      <option value="">Todas as categorias</option>
+                      {Object.entries(vehicleCategoryLabels).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={driverRegionFilter}
+                      onChange={(event) => setDriverRegionFilter(event.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-dark"
+                      aria-label="Filtrar por região"
+                    >
+                      <option value="">Todas as regiões</option>
+                      {regionOptions.map((region) => (
+                        <option key={region.id} value={region.id}>{region.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <SearchableSelect
                     options={availableDrivers}
                     value={selectedDriverId}

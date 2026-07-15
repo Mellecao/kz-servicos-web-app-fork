@@ -10,10 +10,13 @@ import {
   createVehicle,
   fetchServiceCategories,
   fetchVehiclesByDriver,
+  fetchDriverRegions,
+  createDriverRegion,
+  replaceDriverProfileRegions,
   updateDriverById,
 } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-import type { DriverProfile, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
+import type { DriverProfile, DriverRegion, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
 
 interface NovoMotoristaFormProps {
   open: boolean;
@@ -73,6 +76,10 @@ export default function NovoMotoristaForm({
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [driverPhotoFiles, setDriverPhotoFiles] = useState<File[]>([]);
   const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
+  const [availableRegions, setAvailableRegions] = useState<DriverRegion[]>([]);
+  const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
+  const [regionInput, setRegionInput] = useState("");
+  const [addingRegion, setAddingRegion] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -104,8 +111,19 @@ export default function NovoMotoristaForm({
     setProfilePhotoFile(null);
     setDriverPhotoFiles([]);
     setVehiclePhotoFiles([]);
+    setSelectedRegionIds(
+      driver.driver_profile_regions?.map((item) => item.region_id) ?? [],
+    );
+    setRegionInput("");
     setEmailError("");
   }, [open, driver]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchDriverRegions().then(setAvailableRegions).catch(() => {
+      setAvailableRegions([]);
+    });
+  }, [open]);
 
   function resetForm() {
     setFullName("");
@@ -128,6 +146,8 @@ export default function NovoMotoristaForm({
     setProfilePhotoFile(null);
     setDriverPhotoFiles([]);
     setVehiclePhotoFiles([]);
+    setSelectedRegionIds([]);
+    setRegionInput("");
     setEmailError("");
   }
 
@@ -181,6 +201,30 @@ export default function NovoMotoristaForm({
         photo_url: publicUrl,
       });
       if (insertError) throw insertError;
+    }
+  }
+
+  async function handleAddRegion() {
+    const cleanInput = regionInput.trim();
+    if (!cleanInput || addingRegion) return;
+    const existing = availableRegions.find(
+      (region) => region.normalized_name === cleanInput.toLowerCase().replace(/\s+/g, " "),
+    );
+    if (existing) {
+      setSelectedRegionIds((current) => current.includes(existing.id) ? current : [...current, existing.id]);
+      setRegionInput("");
+      return;
+    }
+    setAddingRegion(true);
+    try {
+      const region = await createDriverRegion(cleanInput);
+      setAvailableRegions((current) => [...current.filter((item) => item.id !== region.id), region].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedRegionIds((current) => current.includes(region.id) ? current : [...current, region.id]);
+      setRegionInput("");
+    } catch {
+      toast("danger", "Não foi possível cadastrar a região");
+    } finally {
+      setAddingRegion(false);
     }
   }
 
@@ -255,6 +299,7 @@ export default function NovoMotoristaForm({
             category: vehicleCategory || null,
           },
         });
+        await replaceDriverProfileRegions(driver.id, selectedRegionIds);
         await uploadProfilePhoto(userId);
         await uploadDriverPhotos(driver.id);
         if (vehiclePhotoFiles.length > 0) {
@@ -297,6 +342,7 @@ export default function NovoMotoristaForm({
           cnh_expiration_date: cnhExpiration || null,
           is_available: true,
         });
+        await replaceDriverProfileRegions(driverProfile.id, selectedRegionIds);
 
         // 5. Create vehicle if any field is filled
         await uploadProfilePhoto(user.id);
@@ -517,6 +563,56 @@ export default function NovoMotoristaForm({
               {driverPhotoFiles.length} foto(s) selecionada(s)
             </p>
           )}
+        </div>
+
+        <div className="border-t border-border pt-4 mt-2" />
+        <h3 className={sectionClass}>Regiões de atuação</h3>
+        <div>
+          <label htmlFor="driver-region" className={labelClass}>Região</label>
+          <div className="flex gap-2">
+            <input
+              id="driver-region"
+              list="driver-region-options"
+              value={regionInput}
+              onChange={(e) => setRegionInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleAddRegion();
+                }
+              }}
+              placeholder="Ex: Zona Sul, Guarulhos"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => void handleAddRegion()}
+              disabled={!regionInput.trim() || addingRegion}
+              className="shrink-0 rounded-lg bg-primary px-3 text-sm font-heading font-bold text-white disabled:opacity-50"
+            >
+              {addingRegion ? "..." : "Adicionar"}
+            </button>
+          </div>
+          <datalist id="driver-region-options">
+            {availableRegions.map((region) => <option key={region.id} value={region.name} />)}
+          </datalist>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {selectedRegionIds.map((regionId) => {
+              const region = availableRegions.find((item) => item.id === regionId);
+              if (!region) return null;
+              return (
+                <button
+                  key={region.id}
+                  type="button"
+                  onClick={() => setSelectedRegionIds((current) => current.filter((id) => id !== region.id))}
+                  className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-body text-primary hover:bg-danger/10 hover:text-danger"
+                  title="Remover região"
+                >
+                  {region.name} ×
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Section: CNH */}

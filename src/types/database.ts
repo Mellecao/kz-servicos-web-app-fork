@@ -96,6 +96,7 @@ export interface DriverProfile {
   };
   driver_profile_photos?: DriverProfilePhoto[];
   driver_profile_regions?: DriverProfileRegion[];
+  vehicles?: Vehicle[];
 }
 
 export interface DriverRegion {
