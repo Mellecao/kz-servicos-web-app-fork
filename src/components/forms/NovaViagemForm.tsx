@@ -9,7 +9,7 @@ import { useToast } from "@/components/Toast";
 import {
   adminCreateTrip,
   fetchClientAddressHistory,
-  fetchUsers,
+  fetchClients,
   fetchServiceCategories,
 } from "@/lib/api";
 import {
@@ -182,8 +182,8 @@ export default function NovaViagemForm({
   }, [clientId]);
 
   const loadClients = () => {
-    fetchUsers()
-      .then((users) => setClients(users.filter((u) => u.role === "client")))
+    fetchClients()
+      .then(setClients)
       .catch(() => toast("danger", "Erro ao carregar clientes"));
   };
 
