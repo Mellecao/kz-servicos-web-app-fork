@@ -69,6 +69,7 @@ export default function NovoMotoristaForm({
   const [color, setColor] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
   const [passengerCapacity, setPassengerCapacity] = useState("");
+  const [vehicleCategory, setVehicleCategory] = useState<"" | "simple" | "popular" | "luxury">("");
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [driverPhotoFiles, setDriverPhotoFiles] = useState<File[]>([]);
   const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
@@ -99,6 +100,7 @@ export default function NovoMotoristaForm({
     setColor(vehicle?.color ?? "");
     setLicensePlate(vehicle?.license_plate ?? "");
     setPassengerCapacity(vehicle?.passenger_capacity ? String(vehicle.passenger_capacity) : "");
+    setVehicleCategory(vehicle?.category ?? "");
     setProfilePhotoFile(null);
     setDriverPhotoFiles([]);
     setVehiclePhotoFiles([]);
@@ -122,6 +124,7 @@ export default function NovoMotoristaForm({
     setColor("");
     setLicensePlate("");
     setPassengerCapacity("");
+    setVehicleCategory("");
     setProfilePhotoFile(null);
     setDriverPhotoFiles([]);
     setVehiclePhotoFiles([]);
@@ -249,6 +252,7 @@ export default function NovoMotoristaForm({
             color: color || null,
             license_plate: licensePlate || null,
             passenger_capacity: passengerCapacity || null,
+            category: vehicleCategory || null,
           },
         });
         await uploadProfilePhoto(userId);
@@ -307,6 +311,7 @@ export default function NovoMotoristaForm({
             color,
             license_plate: licensePlate,
             passenger_capacity: Number(passengerCapacity) || 4,
+            category: vehicleCategory || null,
           });
           await uploadVehiclePhotos(vehicle.id);
         }
@@ -653,6 +658,16 @@ export default function NovoMotoristaForm({
               className={inputClass}
             />
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="vehicle-category" className={labelClass}>Categoria do carro</label>
+          <select id="vehicle-category" value={vehicleCategory} onChange={(e) => setVehicleCategory(e.target.value as "" | "simple" | "popular" | "luxury")} className={inputClass}>
+            <option value="">Não definida</option>
+            <option value="simple">Simples</option>
+            <option value="popular">Popular</option>
+            <option value="luxury">Luxo</option>
+          </select>
         </div>
 
         <div>

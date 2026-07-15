@@ -24,6 +24,8 @@ import {
   rejectCancellationRequest,
   deleteTrip,
   addTripDriverCandidate,
+  addAllApprovedTripCandidates,
+  fetchNearbyTripDrivers,
   removeTripDriverCandidate,
   updateTripDriverCandidateStatus,
   updateTripDriverCandidatePrice,
@@ -171,6 +173,10 @@ export default function TripDetailModal({
   // Driver selector state
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
+  const [addingAllDrivers, setAddingAllDrivers] = useState(false);
+  const [nearbyDrivers, setNearbyDrivers] = useState<
+    Array<{ driver_profile_id: string; distance_meters: number }>
+  >([]);
   const [resendingDriverConfirmation, setResendingDriverConfirmation] =
     useState(false);
   const [selectingCandidateId, setSelectingCandidateId] = useState<
@@ -380,6 +386,14 @@ export default function TripDetailModal({
     }
   }, [liveTrip?.status, allDrivers.length]);
 
+  useEffect(() => {
+    if (liveTrip?.status !== "searching_drivers") {
+      setNearbyDrivers([]);
+      return;
+    }
+    fetchNearbyTripDrivers(liveTrip.id).then(setNearbyDrivers).catch(() => {});
+  }, [liveTrip?.id, liveTrip?.status]);
+
   if (!open || !liveTrip) return null;
 
   const t = liveTrip;
@@ -420,6 +434,33 @@ export default function TripDetailModal({
       value: d.id,
       label: d.provider_profiles?.users?.full_name ?? d.id,
     }));
+
+  const nearbyAvailableDrivers = nearbyDrivers
+    .filter((nearby) => !candidateDriverIds.has(nearby.driver_profile_id))
+    .map((nearby) => ({
+      ...nearby,
+      driver: allDrivers.find((driver) => driver.id === nearby.driver_profile_id),
+    }))
+    .filter((entry) => entry.driver);
+
+  async function handleAddAllDrivers() {
+    if (!t || addingAllDrivers) return;
+    const confirmed = window.confirm(
+      "Enviar esta corrida para todos os motoristas aprovados? Motoristas já candidatos não receberão convite duplicado.",
+    );
+    if (!confirmed) return;
+    setAddingAllDrivers(true);
+    try {
+      const count = await addAllApprovedTripCandidates(t.id);
+      toast("success", count ? `${count} motoristas adicionados` : "Todos os motoristas aprovados já são candidatos");
+      await loadTripData(t.id);
+      onUpdate();
+    } catch {
+      toast("danger", "Não foi possível enviar para todos os motoristas");
+    } finally {
+      setAddingAllDrivers(false);
+    }
+  }
 
   async function handleApprove() {
     if (!t) return;
@@ -1141,7 +1182,7 @@ export default function TripDetailModal({
 
               {/* Search input — visible only in searching_drivers */}
               {t.status === "searching_drivers" && (
-                <div className="mb-2">
+                <div className="mb-3 flex flex-col gap-2">
                   <SearchableSelect
                     options={availableDrivers}
                     value={selectedDriverId}
@@ -1152,6 +1193,35 @@ export default function TripDetailModal({
                     placeholder="Buscar e adicionar motorista..."
                     disabled={addingDriver}
                   />
+                  <button
+                    type="button"
+                    onClick={handleAddAllDrivers}
+                    disabled={addingAllDrivers}
+                    className="w-full py-2 rounded-lg border border-primary text-primary text-sm font-heading font-bold hover:bg-primary hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {addingAllDrivers ? "Enviando..." : "Enviar para todos os aprovados"}
+                  </button>
+                  {nearbyAvailableDrivers.length > 0 && (
+                    <div className="border border-border rounded-lg p-3">
+                      <p className="text-xs font-heading font-bold text-contrast uppercase mb-2">
+                        Próximos do embarque
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {nearbyAvailableDrivers.map(({ driver, distance_meters }) => (
+                          <button
+                            type="button"
+                            key={driver!.id}
+                            onClick={() => handleAddCandidate(driver!.id)}
+                            disabled={addingDriver}
+                            className="flex justify-between gap-2 text-left text-xs text-dark hover:text-primary"
+                          >
+                            <span className="truncate">{driver!.provider_profiles?.users?.full_name ?? "Motorista"}</span>
+                            <span className="shrink-0 text-contrast">{(distance_meters / 1000).toFixed(1)} km</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

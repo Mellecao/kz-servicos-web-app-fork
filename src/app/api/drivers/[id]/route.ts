@@ -22,6 +22,7 @@ type DriverPatchBody = {
     color?: unknown;
     license_plate?: unknown;
     passenger_capacity?: unknown;
+    category?: unknown;
   };
 };
 
@@ -155,6 +156,7 @@ function normalizeVehicle(vehicle: DriverPatchBody["vehicle"]): {
     color: string;
     license_plate: string;
     passenger_capacity: number;
+    category: "simple" | "popular" | "luxury" | null;
   } | null;
   error: string | null;
 } {
@@ -166,6 +168,7 @@ function normalizeVehicle(vehicle: DriverPatchBody["vehicle"]): {
   const color = asNullableString(vehicle.color);
   const licensePlate = asNullableString(vehicle.license_plate);
   const passengerCapacity = asOptionalNumber(vehicle.passenger_capacity) ?? 4;
+  const category = asVehicleCategory(vehicle.category);
 
   const hasAny = brand || model || year || color || licensePlate || vehicle.passenger_capacity;
   if (!hasAny) return { payload: null, error: null };
@@ -181,9 +184,14 @@ function normalizeVehicle(vehicle: DriverPatchBody["vehicle"]): {
       color,
       license_plate: licensePlate,
       passenger_capacity: passengerCapacity,
+      category,
     },
     error: null,
   };
+}
+
+function asVehicleCategory(value: unknown): "simple" | "popular" | "luxury" | null {
+  return value === "simple" || value === "popular" || value === "luxury" ? value : null;
 }
 
 function asProviderStatus(value: unknown): ProviderStatus | null {

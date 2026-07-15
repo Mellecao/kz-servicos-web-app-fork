@@ -95,6 +95,21 @@ export interface DriverProfile {
     users?: User;
   };
   driver_profile_photos?: DriverProfilePhoto[];
+  driver_profile_regions?: DriverProfileRegion[];
+}
+
+export interface DriverRegion {
+  id: string;
+  name: string;
+  normalized_name: string;
+  created_at: string;
+}
+
+export interface DriverProfileRegion {
+  driver_profile_id: string;
+  region_id: string;
+  created_at: string;
+  driver_regions?: DriverRegion;
 }
 
 export interface DriverProfilePhoto {
@@ -130,6 +145,7 @@ export interface Vehicle {
   vehicle_document_url: string | null;
   passenger_capacity: number;
   is_active: boolean;
+  category: "simple" | "popular" | "luxury" | null;
   created_at: string;
   updated_at: string;
   vehicle_photos?: VehiclePhoto[];
@@ -178,6 +194,8 @@ export interface TripStop {
   address_id: string;
   stop_order: number;
   created_at: string;
+  arrived_at: string | null;
+  resumed_at: string | null;
   addresses?: Address;
 }
 
@@ -221,6 +239,10 @@ export interface Trip {
   scheduled_datetime: string;
   is_round_trip: boolean;
   return_datetime: string | null;
+  execution_stage: TripExecutionStage | null;
+  current_stop_order: number | null;
+  return_started_at: string | null;
+  return_arrived_at: string | null;
   passenger_count: number;
   children_count: number;
   observations: string | null;
@@ -249,6 +271,15 @@ export interface Trip {
   vehicles?: Vehicle;
   users?: User;
 }
+
+export type TripExecutionStage =
+  | "to_pickup"
+  | "to_stop"
+  | "waiting_at_stop"
+  | "to_destination"
+  | "waiting_for_return"
+  | "returning"
+  | "finished";
 
 export interface ServiceRequest {
   id: string;

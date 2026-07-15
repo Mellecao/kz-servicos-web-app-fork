@@ -21,7 +21,7 @@ Este documento é o retrato completo da sessão de desenvolvimento em que atacam
 |---|---|---|---|---|---|
 | P2 | Bug do PWA no iPhone (corridas somem) | ✅ Implementado | Nenhum | 1 novo + 2 modificados | Teste no iPhone real |
 | P1 | Click em push admin não abre corrida | ✅ Implementado | Nenhum | 3 modificados | **Redeploy do edge function** + teste |
-| P5 | Salvar Casa/Trabalho no cliente | ✅ Implementado | Nenhum (usa migration existente) | 1 novo + 2 modificados | Teste manual |
+| P5 | Salvar Casa/Trabalho no cliente | ✅ Implementado + fallback da listagem | **Sim (migration ausente no remoto)** | 2 novos + 2 modificados | Aplicar SQL corretivo + teste manual |
 | P6 | Autocomplete inteligente | ✅ Implementado | Nenhum | 2 novos + 3 modificados | Teste manual |
 | P8 | Histórico + contadores do cliente | ✅ Implementado | Nenhum | 2 novos + 3 modificados | Teste manual |
 | P4 | Editar viagem em qualquer status | ✅ Implementado (escopo reduzido) | Nenhum | 1 novo + 2 modificados | Teste manual; **motorista fica fora de escopo desta iteração** |
@@ -37,7 +37,7 @@ Este documento é o retrato completo da sessão de desenvolvimento em que atacam
 - **Commits:** Nenhum commit feito. Usuário quer commitar tudo no final, agrupando à mão.
 - **Testes:** P7 e P3 adicionaram testes Flutter. A suíte completa passou com 134 testes e `flutter analyze` sem issues. Validação manual no iPhone real continua no backlog.
 - **Deploy de Edge Functions:** `send-admin-onesignal-push` e `send-fcm-push` precisam de redeploy para publicar os novos deep-links e eventos.
-- **SQL:** P7 e P3 possuem migrations, versões up-only separadas e um SQL completo único para o SQL Editor. Como o histórico remoto tem sete versões ausentes localmente, use o script de `supabase/sql/` descrito abaixo; ele não corrige a tabela de histórico de migrations.
+- **SQL:** P5 possui um SQL corretivo porque `user_saved_addresses` está ausente no remoto. P7 e P3 possuem migrations, versões up-only separadas e um SQL completo único para o SQL Editor. Esses scripts não corrigem a tabela de histórico de migrations.
 
 ---
 
@@ -74,6 +74,7 @@ Este documento é o retrato completo da sessão de desenvolvimento em que atacam
 - `docs/superpowers/plans/2026-07-14-p7-trip-cancellation-approval.md`
 
 **Banco e Flutter (P7):**
+- `supabase/sql/20260715_fix_client_saved_addresses_up.sql` (P5)
 - `supabase/migrations/20260714120000_trip_cancellation_requests.sql`
 - `supabase/sql/20260714_p7_trip_cancellation_requests_up.sql`
 - `C:\Projetos\kz-servicos-app-prestador\lib\core\services\trip_cancellation_service.dart`
@@ -220,8 +221,9 @@ Nenhum.
 Escopo estendido durante o brainstorm: incluir **Trabalho também** (usuário concordou, dado que o schema já suporta).
 
 ### Descoberta
-A infraestrutura **já existia**:
-- Migração `supabase/migrations/20260618170000_create_user_saved_addresses.sql` já criou `user_saved_addresses(user_id, address_id, label)` com constraint único parcial em `(user_id, label) WHERE label IN ('home','work')`.
+A infraestrutura existia no repositório, mas não no banco remoto:
+- Migração `supabase/migrations/20260618170000_create_user_saved_addresses.sql` define `user_saved_addresses(user_id, address_id, label)` com constraint único parcial em `(user_id, label) WHERE label IN ('home','work')`.
+- Em 2026-07-15, a REST API remota confirmou `users = 200` e `user_saved_addresses = 404`.
 - RLS admin-friendly.
 - `fetchClients` já traz `user_saved_addresses(*, addresses(*))` embutido.
 - `SavedAddressesSummary` já exibe Home/Work no card.
@@ -236,6 +238,9 @@ Só faltava UI de edição e funções para persistir.
   - `fetchUserSavedAddresses(userId)` — SELECT com join
   - `saveUserSavedAddress(userId, label, address)` — INSERT novo `addresses` + UPSERT `user_saved_addresses` (via SELECT + INSERT/UPDATE, mais previsível que ON CONFLICT em índice parcial)
   - `removeUserSavedAddress(userId, label)` — DELETE
+  - `fetchClients()` agora repete a consulta somente em `users` quando o join de Casa/Trabalho falha, impedindo que dados complementares esvaziem a lista.
+
+- **`src/app/(dashboard)/clientes/page.tsx`:** falhas da consulta principal agora exibem um estado de erro com nova tentativa, em vez de "Nenhum cliente encontrado".
 
 - **`src/components/forms/NovoClienteForm.tsx`:**
   - Novos imports (AddressAutocompleteField, funções de saved_addresses, GooglePlaceAddress, UserSavedAddress)
@@ -252,13 +257,13 @@ Só faltava UI de edição e funções para persistir.
 - Cliente **existente**: campos populados com o que já tinha salvo. Diff detecta mudanças; salva incremental. Botão "Limpar" remove o vínculo (sem apagar o `addresses` que pode estar em uso por trips).
 
 ### Verificado
-- Lint + Build OK.
+- Lint direcionado + build Next 16.2.3 OK após o fallback.
 
 ### Débito
 - Teste manual: editar cliente, adicionar Casa/Trabalho, salvar, reabrir e confirmar. Testar Limpar. Testar edição sem tocar endereços (não deve gerar requests).
 
 ### SQL
-Nenhum — schema já existia.
+Executar `supabase/sql/20260715_fix_client_saved_addresses_up.sql` para criar a tabela, índices, RLS, grants e trigger de `updated_at` que estão ausentes no remoto.
 
 ---
 
@@ -606,7 +611,7 @@ a usar `db push`.
 
 ## Antes de mergear/publicar
 
-1. **Aplicar SQL no Supabase:** rodar `supabase/sql/20260715_p7_p3_complete_up.sql` pelo SQL Editor.
+1. **Aplicar SQL no Supabase:** rodar `supabase/sql/20260715_fix_client_saved_addresses_up.sql`; se P7/P3 ainda não foram aplicados, rodar também `supabase/sql/20260715_p7_p3_complete_up.sql`.
 2. **Redeploy das Edge Functions:** executar `supabase functions deploy send-fcm-push` e `supabase functions deploy send-admin-onesignal-push`.
 3. **Testes manuais no iPhone** (todos os P feitos):
    - P2: instalar PWA, entrar pelo ícone → deve ir pra login, não pra dashboard vazio.

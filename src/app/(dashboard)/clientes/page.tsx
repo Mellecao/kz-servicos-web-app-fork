@@ -62,6 +62,7 @@ export default function ClientesPage() {
   const { toast } = useToast();
   const [clients, setClients] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -78,12 +79,18 @@ export default function ClientesPage() {
   const [historyEntries, setHistoryEntries] = useState<ClientTripHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const loadClients = useCallback(() => {
+  const loadClients = useCallback(async () => {
     setLoading(true);
-    fetchClients()
-      .then(setClients)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    setLoadError(null);
+    try {
+      setClients(await fetchClients());
+    } catch (error) {
+      console.error(error);
+      setClients([]);
+      setLoadError("Não foi possível carregar os clientes.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -247,6 +254,20 @@ export default function ClientesPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : loadError ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-3 py-20 text-center"
+        >
+          <p className="text-sm text-danger">{loadError}</p>
+          <button
+            type="button"
+            onClick={loadClients}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-surface-hover"
+          >
+            Tentar novamente
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-contrast text-sm">

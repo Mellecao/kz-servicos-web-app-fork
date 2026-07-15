@@ -157,8 +157,26 @@ export async function fetchClients(): Promise<User[]> {
     .select("*, user_saved_addresses(*, addresses(*))")
     .eq("role", "client")
     .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data as User[];
+  if (!error) return (data ?? []) as User[];
+
+  // Casa/Trabalho is supplementary data. A missing migration or stale
+  // PostgREST relationship must not hide the clients stored in public.users.
+  const { data: clients, error: clientsError } = await supabase
+    .from("users")
+    .select("*")
+    .eq("role", "client")
+    .order("created_at", { ascending: false });
+
+  if (clientsError) throw clientsError;
+
+  console.warn(
+    "Clientes carregados sem Casa/Trabalho porque o relacionamento falhou:",
+    error.message,
+  );
+  return ((clients ?? []) as User[]).map((client) => ({
+    ...client,
+    user_saved_addresses: [],
+  }));
 }
 
 export async function fetchUserById(id: string): Promise<User> {
@@ -614,6 +632,31 @@ export async function addTripDriverCandidate(
     driver_profile_id: driverProfileId,
   });
   return data as TripDriverCandidate;
+}
+
+export async function addAllApprovedTripCandidates(tripId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("add_all_approved_trip_candidates", {
+    p_trip_id: tripId,
+  });
+  if (error) throw error;
+  logAdminAction("Todos os motoristas aprovados adicionados", tripId, {
+    added_count: data ?? 0,
+  });
+  return Number(data ?? 0);
+}
+
+export async function fetchNearbyTripDrivers(tripId: string) {
+  const { data, error } = await supabase.rpc("nearby_trip_drivers", {
+    p_trip_id: tripId,
+    p_radius_meters: 10000,
+  });
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    driver_profile_id: string;
+    distance_meters: number;
+    vehicle_category: "simple" | "popular" | "luxury" | null;
+    regions: string[];
+  }>;
 }
 
 export async function removeTripDriverCandidate(
@@ -1129,7 +1172,7 @@ export async function fetchDebitos(): Promise<Debito[]> {
 export async function fetchDriverProfiles(): Promise<DriverProfile[]> {
   const { data, error } = await supabase
     .from("driver_profiles")
-    .select("*, provider_profiles(*, users(*)), driver_profile_photos(*)");
+    .select("*, provider_profiles(*, users(*)), driver_profile_photos(*), driver_profile_regions(*, driver_regions(*))");
   if (error) throw error;
   return data as DriverProfile[];
 }
@@ -2037,6 +2080,7 @@ export async function updateDriverById(
       color?: string | null;
       license_plate?: string | null;
       passenger_capacity?: number | string | null;
+      category?: "simple" | "popular" | "luxury" | null;
     };
   },
 ): Promise<DriverProfile> {
@@ -2095,6 +2139,7 @@ export async function createVehicle(vehicle: {
   license_plate: string;
   vehicle_document_url?: string;
   passenger_capacity: number;
+  category?: "simple" | "popular" | "luxury" | null;
 }) {
   const { data, error } = await supabase
     .from("vehicles")
