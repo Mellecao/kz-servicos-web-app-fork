@@ -6,6 +6,7 @@ import { buildServiceCategorySlug } from "@/lib/service-category-utils";
 import { isProviderWithoutDriverProfile } from "@/lib/provider-filters";
 import { shouldResetTripAfterCandidateRemoval } from "@/lib/trip-candidate-actions";
 import type { GooglePlaceAddress } from "@/lib/google-places";
+import type { TripPatch } from "@/lib/trip-edit";
 import type {
   User,
   Trip,
@@ -288,72 +289,25 @@ export async function updateTripStatus(
   logAdminAction("Status atualizado", id, { status });
 }
 
-// ─── Admin Update Trip Basics (address, datetime) ─────────
-export async function adminUpdateTripBasics(
+// ─── Admin Update Trip ────────────────────────────────────
+export async function adminUpdateTrip(
   tripId: string,
-  updates: {
-    pickup?: GooglePlaceAddress;
-    dropoff?: GooglePlaceAddress;
-    scheduled_datetime?: string;
-  },
+  updates: TripPatch,
 ): Promise<void> {
-  const payload: Record<string, unknown> = {};
-
-  if (updates.pickup) {
-    const { data, error } = await supabase
-      .from("addresses")
-      .insert({
-        formatted_address: updates.pickup.formatted_address,
-        google_place_id: updates.pickup.google_place_id ?? null,
-        latitude: updates.pickup.latitude ?? null,
-        longitude: updates.pickup.longitude ?? null,
-        street: updates.pickup.street ?? null,
-        number: updates.pickup.number ?? null,
-        neighborhood: updates.pickup.neighborhood ?? null,
-        city: updates.pickup.city ?? null,
-        state: updates.pickup.state ?? null,
-        zip_code: updates.pickup.zip_code ?? null,
-      })
-      .select("id")
-      .single();
-    if (error || !data) throw error ?? new Error("pickup insert failed");
-    payload.pickup_address_id = data.id;
-  }
-
-  if (updates.dropoff) {
-    const { data, error } = await supabase
-      .from("addresses")
-      .insert({
-        formatted_address: updates.dropoff.formatted_address,
-        google_place_id: updates.dropoff.google_place_id ?? null,
-        latitude: updates.dropoff.latitude ?? null,
-        longitude: updates.dropoff.longitude ?? null,
-        street: updates.dropoff.street ?? null,
-        number: updates.dropoff.number ?? null,
-        neighborhood: updates.dropoff.neighborhood ?? null,
-        city: updates.dropoff.city ?? null,
-        state: updates.dropoff.state ?? null,
-        zip_code: updates.dropoff.zip_code ?? null,
-      })
-      .select("id")
-      .single();
-    if (error || !data) throw error ?? new Error("dropoff insert failed");
-    payload.dropoff_address_id = data.id;
-  }
-
-  if (updates.scheduled_datetime) {
-    payload.scheduled_datetime = updates.scheduled_datetime;
-  }
-
-  if (Object.keys(payload).length === 0) return;
-
-  const { error: updateError } = await supabase
-    .from("trips")
-    .update(payload)
-    .eq("id", tripId);
-  if (updateError) throw updateError;
-
-  logAdminAction("Viagem editada", tripId, payload);
+  const { data } = await supabase.auth.getSession();
+  const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(data.session?.access_token
+        ? { Authorization: `Bearer ${data.session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify(updates),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Erro ao atualizar viagem");
+  logAdminAction("Viagem editada", tripId, updates as Record<string, unknown>);
 }
 
 export async function deleteTrip(id: string): Promise<void> {
