@@ -26,10 +26,14 @@ import {
   getClientConfirmationBlockReason,
   getTripStatusActions,
   isTripAdminActionRequired,
+  isFlashTrip,
 } from "@/lib/trip-status";
 import { formatBrazilDateTime } from "@/lib/brazil-time";
 import { filterTripsBySearch } from "@/lib/trip-search";
-import type { Trip, TripDriverCandidate, TripStatus } from "@/types/database";
+import { FlashBadge } from "@/components/FlashBadge";
+import type { Trip, TripDriverCandidate, TripStatus, TripType } from "@/types/database";
+
+type TripTypeFilter = "all" | TripType;
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
   { id: "open", title: "Aberta", color: "#FEBF22" },
@@ -85,6 +89,7 @@ export default function ViagensPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [tripSearch, setTripSearch] = useState("");
+  const [tripTypeFilter, setTripTypeFilter] = useState<TripTypeFilter>("all");
   const [viewedTripIds, setViewedTripIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -239,13 +244,20 @@ export default function ViagensPage() {
   );
 
   const isSearching = tripSearch.trim().length > 0;
+  const typeFilteredTrips = useMemo(
+    () =>
+      tripTypeFilter === "all"
+        ? trips
+        : trips.filter((t) => (t.trip_type ?? "standard") === tripTypeFilter),
+    [trips, tripTypeFilter],
+  );
   const visibleTrips = useMemo(
-    () => filterTripsBySearch(trips, tripSearch, candidatesByTrip),
-    [candidatesByTrip, tripSearch, trips],
+    () => filterTripsBySearch(typeFilteredTrips, tripSearch, candidatesByTrip),
+    [candidatesByTrip, tripSearch, typeFilteredTrips],
   );
 
   const columns = tripColumnConfig.map((col) => {
-    const colTrips = (isSearching ? visibleTrips : trips).filter(
+    const colTrips = (isSearching ? visibleTrips : typeFilteredTrips).filter(
       (t) => t.status === col.id,
     );
     return {
@@ -256,8 +268,13 @@ export default function ViagensPage() {
         title: `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`,
         subtitle: `${t.users?.full_name ?? "—"} • Motorista: ${t.driver_profiles?.provider_profiles?.users?.full_name ?? "Sem motorista"} • ${t.passenger_count} passageiro${t.passenger_count !== 1 ? "s" : ""}`,
         date: formatDate(t.scheduled_datetime),
-        ...(t.is_round_trip ? { tag: "Ida e volta", tagColor: "#2261FE" } : {}),
-        ...(t.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),
+        ...(isFlashTrip(t)
+          ? { tag: "⚡ FLASH", tagColor: "#facc15" }
+          : t.is_round_trip
+          ? { tag: "Ida e volta", tagColor: "#2261FE" }
+          : t.is_paid
+          ? { tag: "Pago", tagColor: "#22c55e" }
+          : {}),
         requiresAttention:
           isTripAdminActionRequired(t.status) && !viewedTripIds.has(t.id),
       })),
@@ -287,7 +304,7 @@ export default function ViagensPage() {
         </button>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-stretch">
         <label htmlFor="trip-search" className="sr-only">
           Pesquisar viagens
         </label>
@@ -299,6 +316,19 @@ export default function ViagensPage() {
           placeholder="Pesquisar por cliente, motorista, destino, origem ou status"
           className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-dark outline-none transition-colors placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
+        <label htmlFor="trip-type-filter" className="sr-only">
+          Filtrar por tipo
+        </label>
+        <select
+          id="trip-type-filter"
+          value={tripTypeFilter}
+          onChange={(event) => setTripTypeFilter(event.target.value as TripTypeFilter)}
+          className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-dark outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 md:w-48"
+        >
+          <option value="all">Todos os tipos</option>
+          <option value="standard">Padrão</option>
+          <option value="flash">⚡ Flash</option>
+        </select>
       </div>
 
       {!isSearching && (
@@ -362,9 +392,12 @@ export default function ViagensPage() {
                 >
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm font-heading font-bold text-dark">
-                        {shortenAddress(trip.pickup_address?.formatted_address)} →{" "}
-                        {shortenAddress(trip.dropoff_address?.formatted_address)}
+                      <p className="flex items-center gap-2 text-sm font-heading font-bold text-dark">
+                        {isFlashTrip(trip) && <FlashBadge />}
+                        <span>
+                          {shortenAddress(trip.pickup_address?.formatted_address)} →{" "}
+                          {shortenAddress(trip.dropoff_address?.formatted_address)}
+                        </span>
                       </p>
                       <p className="mt-1 text-xs text-contrast">
                         Cliente: {trip.users?.full_name ?? "—"} ·{" "}

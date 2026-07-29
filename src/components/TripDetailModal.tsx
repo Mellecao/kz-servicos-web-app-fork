@@ -40,7 +40,9 @@ import {
 import {
   getClientConfirmationBlockReason,
   getTripStatusActions,
+  isFlashTrip,
 } from "@/lib/trip-status";
+import { FlashBadge } from "@/components/FlashBadge";
 import { canAdminApproveForClient } from "@/lib/trip-candidate-actions";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
@@ -425,14 +427,19 @@ export default function TripDetailModal({
     bg: "#FEBF2220",
     text: "#FEBF22",
   };
-  const forwardActions = getTripStatusActions(t.status).filter(
-    (action) => action.direction === "forward",
-  );
+  const isFlash = isFlashTrip(t);
+  const forwardActions = isFlash
+    ? []
+    : getTripStatusActions(t.status).filter(
+        (action) => action.direction === "forward",
+      );
   const visibleForwardActions =
     t.status === "awaiting_driver_confirmation" ? [] : forwardActions;
-  const rollbackActions = getTripStatusActions(t.status).filter(
-    (action) => action.direction === "back",
-  );
+  const rollbackActions = isFlash
+    ? []
+    : getTripStatusActions(t.status).filter(
+        (action) => action.direction === "back",
+      );
 
   // Drivers not yet added as candidates
   const candidateDriverIds = new Set(
@@ -980,15 +987,25 @@ export default function TripDetailModal({
             <div className="px-4 md:px-6 py-5 md:border-r border-border md:overflow-y-auto md:w-[65%]">
               {/* Main Info */}
               <div className="flex items-center justify-between mt-6 mb-3">
-                <SectionTitle>Informações da Viagem</SectionTitle>
-                <button
-                  type="button"
-                  onClick={() => setEditModalOpen(true)}
-                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-heading font-bold text-dark hover:border-primary hover:text-primary transition-colors"
-                >
-                  Editar viagem
-                </button>
+                <div className="flex items-center gap-2">
+                  <SectionTitle>Informações da Viagem</SectionTitle>
+                  {isFlash && <FlashBadge />}
+                </div>
+                {!isFlash && (
+                  <button
+                    type="button"
+                    onClick={() => setEditModalOpen(true)}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-heading font-bold text-dark hover:border-primary hover:text-primary transition-colors"
+                  >
+                    Editar viagem
+                  </button>
+                )}
               </div>
+              {isFlash && (
+                <p className="mb-3 text-xs text-contrast italic">
+                  Corrida Flash — apenas leitura. Sem aprovação admin necessária.
+                </p>
+              )}
 
               <InfoRow
                 label="Status"
@@ -1206,8 +1223,8 @@ export default function TripDetailModal({
               {/* Driver Candidates */}
               <SectionTitle>Motoristas Candidatos</SectionTitle>
 
-              {/* Search input — visible only in searching_drivers */}
-              {t.status === "searching_drivers" && (
+              {/* Search input — visible only in searching_drivers (standard trips only) */}
+              {t.status === "searching_drivers" && !isFlash && (
                 <div className="mb-3 flex flex-col gap-2">
                   <div className="grid grid-cols-2 gap-2">
                     <select

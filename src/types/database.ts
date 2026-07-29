@@ -12,6 +12,7 @@ export type TripStatus =
   | "started"
   | "finished"
   | "cancelled";
+export type TripType = "standard" | "flash";
 export type ServiceRequestStatus =
   | "open"
   | "under_review"
@@ -250,6 +251,7 @@ export interface Trip {
   driver_observations: string | null;
   luggage_count: number;
   status: TripStatus;
+  trip_type: TripType;
   estimated_price: number | null;
   final_price: number | null;
   is_paid: boolean;

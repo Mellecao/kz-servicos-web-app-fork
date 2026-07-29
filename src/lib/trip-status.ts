@@ -1,5 +1,11 @@
-import type { TripStatus } from "@/types/database";
+import type { TripStatus, TripType } from "@/types/database";
 import type { TripDriverCandidate } from "@/types/database";
+
+export type FlashTripLike = { trip_type?: TripType | null };
+
+export function isFlashTrip(trip: FlashTripLike | null | undefined): boolean {
+  return trip?.trip_type === "flash";
+}
 
 export type TripStatusAction = {
   label: string;
