@@ -50,8 +50,11 @@ export default function QuotationOverrideCard() {
 
   const availabilityLabel = (() => {
     if (override === null) return "Carregando…";
+    const nowInSp = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })
+    );
     const availability = computeQuotationAvailability({
-      nowInSp: new Date(),
+      nowInSp,
       adminOverride: override,
     });
     if (override === "auto") {
