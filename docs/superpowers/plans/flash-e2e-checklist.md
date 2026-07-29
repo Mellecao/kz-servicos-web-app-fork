@@ -8,15 +8,14 @@
 - Web admin (`kz-servicos-web-app-fork`) rodando (`npm run dev`).
 - Ambos apps Flutter buildados em dispositivos/emuladores separados.
 
-**Observação de wiring pendente (Fase 5):** o fluxo `_openSearch()` do app cliente hoje mostra apenas um snackbar quando o usuário escolhe "flash" — a conversão `endereço place_id/coord → address_id (UUID)` e o passo de categoria ainda precisam ser costurados antes que a Task 25 (`FlashDetailsPage`) receba dados reais. Para os cenários abaixo, criar a `trip` Flash diretamente via SQL (`SELECT create_flash_trip(...)` autenticado como cliente) enquanto o wiring não está pronto.
+**Wiring:** `_openSearch()` do app cliente encaminha a escolha "flash" para o mesmo picker de endereços/passageiros do fluxo standard e, ao confirmar, chama `FlashTripRepository.createFlashTripFromAddresses` (que insere pickup/dropoff, resolve categoria de trip e chama `create_flash_trip`) antes de navegar para `/flash/searching/:tripId`. `FlashDetailsPage` continua registrada em `/flash/details` mas não é usada por este fluxo — pode ser removida ou reaproveitada em iteração futura.
 
 ---
 
 ## Cenário 1 — Happy path
 
 1. **Cliente**: tap na barra de endereço → escolher "Preciso de uma viagem agora".
-   *(temporário: enquanto o wiring está pendente, invocar `create_flash_trip` via SQL como cliente para gerar `trip_id`.)*
-2. Preencher pickup + dropoff → categoria → detalhes (1 passageiro) → **Solicitar Flash**.
+2. Preencher pickup + dropoff → **Solicitar** no painel de detalhes do passageiro.
 3. Verificar: cliente vai para tela **"Buscando motoristas"** (`/flash/searching/:tripId`).
 4. **Motorista 1**: recebe push `⚡ CORRIDA FLASH!` (Task 12/13 do plano — trigger + edge function).
 5. Motorista 1 abre a notificação → cai em `/flash/incoming?tripId=...` (Task 33).
@@ -141,11 +140,10 @@ Após cada execução Flash, rodar um fluxo **standard** (trip_type default) end
 
 ---
 
-## Bugs conhecidos / débitos a fechar antes de GA
+## Débitos não-bloqueantes (podem ficar para pós-GA)
 
-- **Wiring de endereços no cliente (Fase 5, Task 27):** entrada Flash no `_openSearch` só sinaliza snackbar. Requer converter place_id/coord → `addresses.id` (UUID) esperado por `create_flash_trip`, e integrar seleção de categoria antes da navegação para `/flash/details`.
-- **App cliente — snackbar de redispatch:** cubit `FlashSearchingCubit` observa status voltando de `awaiting_driver_confirmation` para `searching_drivers`, mas não emite mensagem informativa "O motorista desistiu, buscando novamente" (útil para cenário 2).
-- **Prestador — resposta a cancelamento remoto:** quando o cliente cancela enquanto motorista está em `FlashIncomingCallPage`, não há realtime observando `trips.status` naquela página; motorista descobre só ao tentar enviar proposta e falhar.
+- **App cliente — snackbar de redispatch:** `FlashSearchingCubit` observa status voltando de `awaiting_driver_confirmation` para `searching_drivers`, mas não emite mensagem informativa "O motorista desistiu, buscando novamente". Fluxo funciona; é só falta de feedback textual.
+- **Prestador — resposta a cancelamento remoto:** quando o cliente cancela enquanto motorista está em `FlashIncomingCallPage`, não há realtime observando `trips.status` naquela página; motorista descobre só ao tentar enviar proposta e falhar. Erro é tratado com SnackBar.
 
 ---
 
