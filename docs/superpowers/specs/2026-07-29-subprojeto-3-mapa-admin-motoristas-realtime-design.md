@@ -90,7 +90,7 @@ package.json                     # +@react-google-maps/api
 
 ### 4.2 Modelo de dados
 
-**Nova interface** em `src/types/database.ts`:
+**Nova interface** em `src/lib/driver-locations.ts` (co-localizada com o parser):
 
 ```typescript
 export interface ActiveDriverLocation {
@@ -103,9 +103,10 @@ export interface ActiveDriverLocation {
   updatedAt: string; // ISO
   tripId: string | null; // populado → em corrida
   vehicle: {
+    brand: string;
     model: string;
-    plate: string;
     color: string;
+    licensePlate: string;
   } | null;
 }
 ```
@@ -117,20 +118,19 @@ SELECT dl.driver_profile_id,
        dl.latitude, dl.longitude, dl.heading,
        dl.trip_id, dl.updated_at,
        u.full_name, u.avatar_url,
-       v.model, v.plate, v.color
+       v.brand, v.model, v.license_plate, v.color, v.is_active, v.updated_at
   FROM driver_locations dl
   JOIN driver_profiles dp ON dp.id = dl.driver_profile_id
   JOIN provider_profiles pp ON pp.id = dp.provider_profile_id
   JOIN users u ON u.id = pp.user_id
-  LEFT JOIN vehicles v
-    ON v.driver_profile_id = dp.id AND v.is_primary = true
+  LEFT JOIN vehicles v ON v.driver_profile_id = dp.id
  WHERE dl.updated_at > now() - INTERVAL '10 minutes'
    AND pp.status = 'approved'
 ```
 
 Executada via Supabase client no client component (após auth handshake). Retorna `ActiveDriverLocation[]`.
 
-**Nota de implementação:** o exato relacionamento entre `vehicles` e `driver_profiles` (coluna `is_primary`) deve ser confirmado durante writing-plans lendo `references/schema.md`. Se `is_primary` não existir, ajustar para pegar o `vehicles[0]` mais recente por `driver_profile_id`.
+**Nota de implementação (confirmada durante o plan):** `vehicles` **não tem** coluna `is_primary`. Colunas reais: `brand, model, year, color, license_plate, is_active, category`. O parser (`parseActiveDriverRow`) filtra `is_active = true` e escolhe o veículo com `updated_at` mais recente.
 
 ### 4.4 Realtime
 
@@ -203,7 +203,7 @@ Clique → seta `selectedDriverId` no `MapaClient` → renderiza `InfoWindow` co
 
 `DriverPopup.tsx` recebe `ActiveDriverLocation` e renderiza:
 - Header: foto grande (64px) + nome
-- Corpo: `modelo · placa · cor` (ou "Veículo não cadastrado" se `vehicle` null)
+- Corpo: `{brand} {model} · {licensePlate} · {color}` (ou "Veículo não cadastrado" se `vehicle` null)
 - Badge de status ("Livre" verde / "Em corrida" azul)
 - Linha "Atualizado há Xs" — calculada com `time-ago.ts`, re-renderiza via `useEffect` com `setInterval(5s)` local
 - Se `tripId`: `<Link href={`/viagens?openTrip=${tripId}`}>Abrir viagem →</Link>`

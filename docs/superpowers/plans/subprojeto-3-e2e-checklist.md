@@ -124,6 +124,16 @@ Após Cenários 1-7, rodar smoke test dos fluxos que compartilham infraestrutura
 
 ---
 
+## Follow-ups identificados no final review
+
+Itens surfados pelo holistic review pós-Task 13. Não bloqueantes; ficam como próximas iterações:
+
+- [ ] **DELETE-vs-upsert race em `MapaClient`** (`src/app/(dashboard)/mapa/MapaClient.tsx:62-88`). Se um `DELETE` chega enquanto um `fetchDriverMeta` de UPDATE anterior está pendente, o driver reaparece como "ghost marker" até o próximo tick de expiração (60s). Mitigação: manter um `Set<string>` de IDs recém-deletados e ignorar upserts dentro de uma janela curta, OU re-verificar existência antes do `setDrivers`. Impacto atual: baixo — o timer de 10min limpa naturalmente.
+- [ ] **`pixelOffset` construído no render de `DriverPopup`** (`src/components/mapa/DriverPopup.tsx:31`). Hoje é seguro porque `DriverPopup` só monta quando `isLoaded=true`, mas o acoplamento é implícito. Mover para `useMemo` guardado por `typeof google !== 'undefined'` deixa a segurança explícita.
+- [ ] **Script npm para rodar testes** — `tsx` foi adicionado como devDep mas não há script em `package.json` explicitando o padrão. Adicionar `"test:lib": "node --import tsx --test src/lib/*.test.ts"` reduz atrito pra próximos devs.
+
+---
+
 ## Execução
 
 - [ ] Cenário 1 — Motorista aparece
