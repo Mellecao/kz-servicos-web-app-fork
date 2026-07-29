@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { fetchDashboardStats } from "@/lib/api";
 import type { TripStatus, ServiceRequestStatus } from "@/types/database";
+import QuotationOverrideCard from "./QuotationOverrideCard";
 
 // ─── Types ─────────────────────────────────────────────────
 interface MonthlyBar {
@@ -838,6 +839,9 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Zone 3.5: Quotation Override ──────────── */}
+      <QuotationOverrideCard />
 
       {/* ── Zone 4: Action Alerts ───────────────────── */}
       {!loading && alerts.length > 0 && (
