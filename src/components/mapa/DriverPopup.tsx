@@ -28,7 +28,7 @@ export default function DriverPopup({ driver, onClose }: DriverPopupProps) {
     <InfoWindow
       position={{ lat: driver.latitude, lng: driver.longitude }}
       onCloseClick={onClose}
-      options={typeof google !== 'undefined' ? { pixelOffset: new google.maps.Size(0, -24) } : undefined}
+      options={{ pixelOffset: new google.maps.Size(0, -24) }}
     >
       <div className="min-w-[220px] max-w-[280px] p-1">
         <div className="flex items-center gap-3 mb-2">
