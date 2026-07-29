@@ -106,10 +106,20 @@ Após executar Cenários 1-7, rodar um fluxo standard (sem Flash) end-to-end par
 
 - [ ] Wire completo do botão "Ligar" (hoje é snackbar stub).
 - [ ] Wire completo do botão "Cancelar" (hoje é snackbar stub — fluxo full requer RPC/side-effect).
-- [ ] Foto do motorista no bottom sheet (`driverPhotoUrl` hoje é `null`).
-- [ ] Label do veículo no bottom sheet (`vehicleLabel` hoje é hardcoded "Veículo").
-- [ ] Badge "Sinal instável" quando `driver_locations` não atualiza > 30s (não implementado nesta iteração).
+- [x] ~~Foto do motorista no bottom sheet~~ — wired ao `_activeDriverAvatarUrl` (commit `7c83e04`).
+- [x] ~~Label do veículo no bottom sheet~~ — wired ao `_activeVehicleSummary` com fallback "Veículo" (commit `7c83e04`).
+- [ ] Badge "Sinal instável" quando `driver_locations` não atualiza > 30s — spec §5 pediu, **NÃO implementado nesta iteração**. Requer timer + estado no LiveTripBottomSheet.
 - [ ] Botão "Ver motorista" (recentraliza câmera quando carro sai da viewport).
+
+## Gaps de comportamento por `execution_stage` (spec §4)
+
+O plano cobriu badge textual (via `TripExecutionStage.label`) e destaque de segmento por `_currentStopOrder` (via `TripStopsLayer`), mas **NÃO implementou tratamento visual distinto** para os seguintes estágios:
+
+- [ ] `waiting_at_stop` — spec previa "sem polyline; parado" com marker do carro sobre a stop. Hoje apenas o badge muda; polyline segmentada continua igual ao `to_stop`.
+- [ ] `waiting_for_return` (round trip) — spec previa mostrar carro sobre destino + pickup original como referência. Hoje comportamento default (rota driver → destino).
+- [ ] `returning` — spec previa polyline destacada carro → pickup original. Hoje comportamento default (rota driver → destino).
+
+**Motivo do deferimento:** os 3 estágios acima só ocorrem em fluxos raros (round trips, paradas explicitamente marcadas como waiting) e requerem lógica de rota reversa + camera fit que amplia o escopo. Iteração seguinte pode adicionar em `_applyStopsLayer` (extendendo para reagir a `_currentExecutionStage`, não apenas `_currentStopOrder`).
 
 ---
 
