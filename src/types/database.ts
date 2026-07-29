@@ -12,7 +12,7 @@ export type TripStatus =
   | "started"
   | "finished"
   | "cancelled";
-export type TripType = "standard" | "flash";
+export type TripType = "standard" | "flash" | "scheduled_quote" | "scheduled_choose_driver";
 export type ServiceRequestStatus =
   | "open"
   | "under_review"

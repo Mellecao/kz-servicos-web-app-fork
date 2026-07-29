@@ -27,6 +27,7 @@ import {
   getTripStatusActions,
   isTripAdminActionRequired,
   isFlashTrip,
+  isQuotationTrip,
 } from "@/lib/trip-status";
 import { formatBrazilDateTime } from "@/lib/brazil-time";
 import { filterTripsBySearch } from "@/lib/trip-search";
@@ -270,6 +271,8 @@ export default function ViagensPage() {
         date: formatDate(t.scheduled_datetime),
         ...(isFlashTrip(t)
           ? { tag: "⚡ FLASH", tagColor: "#facc15" }
+          : isQuotationTrip(t)
+          ? { tag: "💰 COTAÇÃO", tagColor: "#10B981" }
           : t.is_round_trip
           ? { tag: "Ida e volta", tagColor: "#2261FE" }
           : t.is_paid
@@ -328,6 +331,7 @@ export default function ViagensPage() {
           <option value="all">Todos os tipos</option>
           <option value="standard">Padrão</option>
           <option value="flash">⚡ Flash</option>
+          <option value="scheduled_quote">💰 Cotação</option>
         </select>
       </div>
 

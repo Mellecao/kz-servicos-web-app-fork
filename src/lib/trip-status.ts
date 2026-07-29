@@ -7,6 +7,10 @@ export function isFlashTrip(trip: FlashTripLike | null | undefined): boolean {
   return trip?.trip_type === "flash";
 }
 
+export function isQuotationTrip(trip: { trip_type?: string | null } | null | undefined): boolean {
+  return trip?.trip_type === "scheduled_quote";
+}
+
 export type TripStatusAction = {
   label: string;
   to: TripStatus;
