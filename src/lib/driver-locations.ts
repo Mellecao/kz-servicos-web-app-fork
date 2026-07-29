@@ -81,3 +81,50 @@ export function parseActiveDriverRow(row: RawDriverLocationRow): ActiveDriverLoc
       : null,
   };
 }
+
+const ACTIVE_WINDOW_MINUTES = 10;
+
+const SELECT_COLUMNS = `
+  driver_profile_id,
+  latitude,
+  longitude,
+  heading,
+  trip_id,
+  updated_at,
+  driver_profiles!inner (
+    provider_profiles!inner (
+      status,
+      users!inner ( full_name, avatar_url )
+    ),
+    vehicles ( brand, model, color, license_plate, is_active, updated_at )
+  )
+`;
+
+export async function fetchActiveDrivers(): Promise<ActiveDriverLocation[]> {
+  const { supabase } = await import("@/lib/supabase");
+  const cutoffIso = new Date(Date.now() - ACTIVE_WINDOW_MINUTES * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from("driver_locations")
+    .select(SELECT_COLUMNS)
+    .gt("updated_at", cutoffIso)
+    .eq("driver_profiles.provider_profiles.status", "approved");
+
+  if (error) throw error;
+  if (!data) return [];
+  return (data as unknown as RawDriverLocationRow[])
+    .map(parseActiveDriverRow)
+    .filter((d): d is ActiveDriverLocation => d !== null);
+}
+
+export async function fetchDriverMeta(driverProfileId: string): Promise<ActiveDriverLocation | null> {
+  const { supabase } = await import("@/lib/supabase");
+  const { data, error } = await supabase
+    .from("driver_locations")
+    .select(SELECT_COLUMNS)
+    .eq("driver_profile_id", driverProfileId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  return parseActiveDriverRow(data as unknown as RawDriverLocationRow);
+}
