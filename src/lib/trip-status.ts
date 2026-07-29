@@ -11,6 +11,10 @@ export function isQuotationTrip(trip: { trip_type?: string | null } | null | und
   return trip?.trip_type === "scheduled_quote";
 }
 
+export function isChooseDriverTrip(trip: { trip_type?: string | null } | null | undefined): boolean {
+  return trip?.trip_type === "scheduled_choose_driver";
+}
+
 export type TripStatusAction = {
   label: string;
   to: TripStatus;

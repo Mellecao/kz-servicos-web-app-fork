@@ -28,6 +28,7 @@ import {
   isTripAdminActionRequired,
   isFlashTrip,
   isQuotationTrip,
+  isChooseDriverTrip,
 } from "@/lib/trip-status";
 import { formatBrazilDateTime } from "@/lib/brazil-time";
 import { filterTripsBySearch } from "@/lib/trip-search";
@@ -273,6 +274,8 @@ export default function ViagensPage() {
           ? { tag: "⚡ FLASH", tagColor: "#facc15" }
           : isQuotationTrip(t)
           ? { tag: "💰 COTAÇÃO", tagColor: "#10B981" }
+          : isChooseDriverTrip(t)
+          ? { tag: "👤 ESCOLHA MOTORISTA", tagColor: "#8B5CF6" }
           : t.is_round_trip
           ? { tag: "Ida e volta", tagColor: "#2261FE" }
           : t.is_paid
@@ -332,6 +335,7 @@ export default function ViagensPage() {
           <option value="standard">Padrão</option>
           <option value="flash">⚡ Flash</option>
           <option value="scheduled_quote">💰 Cotação</option>
+          <option value="scheduled_choose_driver">👤 Escolha Motorista</option>
         </select>
       </div>
 

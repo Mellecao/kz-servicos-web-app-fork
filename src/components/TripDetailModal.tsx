@@ -41,6 +41,7 @@ import {
   getClientConfirmationBlockReason,
   getTripStatusActions,
   isFlashTrip,
+  isChooseDriverTrip,
 } from "@/lib/trip-status";
 import { FlashBadge } from "@/components/FlashBadge";
 import { canAdminApproveForClient } from "@/lib/trip-candidate-actions";
@@ -428,14 +429,16 @@ export default function TripDetailModal({
     text: "#FEBF22",
   };
   const isFlash = isFlashTrip(t);
-  const forwardActions = isFlash
+  const isScheduledChooseDriver = isChooseDriverTrip(t);
+  const isAdminReadOnly = isFlash || isScheduledChooseDriver;
+  const forwardActions = isAdminReadOnly
     ? []
     : getTripStatusActions(t.status).filter(
         (action) => action.direction === "forward",
       );
   const visibleForwardActions =
     t.status === "awaiting_driver_confirmation" ? [] : forwardActions;
-  const rollbackActions = isFlash
+  const rollbackActions = isAdminReadOnly
     ? []
     : getTripStatusActions(t.status).filter(
         (action) => action.direction === "back",
@@ -1005,6 +1008,37 @@ export default function TripDetailModal({
                 <p className="mb-3 text-xs text-contrast italic">
                   Corrida Flash — apenas leitura. Sem aprovação admin necessária.
                 </p>
+              )}
+              {isScheduledChooseDriver && (
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-xs text-contrast italic">
+                    Escolha seu Motorista — cliente selecionou motorista diretamente. Aprovação admin não requerida.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const reason = window.prompt(
+                        "Motivo do cancelamento (emergência):",
+                      );
+                      if (!reason) return;
+                      try {
+                        const { cancelScheduledChooseDriverTrip } = await import(
+                          "@/lib/scheduled-direct"
+                        );
+                        await cancelScheduledChooseDriverTrip(t.id, reason);
+                        onUpdate?.();
+                        onClose();
+                      } catch (e) {
+                        alert(
+                          `Erro: ${e instanceof Error ? e.message : String(e)}`,
+                        );
+                      }
+                    }}
+                    className="rounded-lg border border-red-500 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    Cancelar (emergência)
+                  </button>
+                </div>
               )}
 
               <InfoRow
