@@ -6,7 +6,7 @@ export const SP_CAMPINAS_BOUNDS = {
 } as const;
 
 // Sem libraries extras — só Maps JS API core (redução de custo e superfície).
-export const GOOGLE_MAPS_LIBRARIES: readonly ("places" | "geometry" | "drawing" | "visualization")[] = [];
+export const GOOGLE_MAPS_LIBRARIES: ("places" | "geometry" | "drawing" | "visualization")[] = [];
 
 export function assertGoogleMapsApiKey(key: string | undefined): asserts key is string {
   if (!key || key.trim() === "") {
