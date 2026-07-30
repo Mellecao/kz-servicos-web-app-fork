@@ -1391,6 +1391,9 @@ export async function fetchDashboardStats() {
     servicesResult,
     paidTripsResult,
     paidServicesResult,
+    finishedTripsHistoricResult,
+    finishedServicesHistoricResult,
+    topDriversResult,
     ratingsResult,
     driversAvailableResult,
     pendingProvidersResult,
@@ -1415,6 +1418,27 @@ export async function fetchDashboardStats() {
       .select("final_price, updated_at, payment_method")
       .eq("is_paid", true)
       .gte("updated_at", sixMonthsAgo),
+    // Trips finalizadas (pagas ou não) nos últimos 6 meses — usado pra
+    // gráfico de receita mensal (mostra receita esperada, não só efetivada).
+    supabase
+      .from("trips")
+      .select("final_price, estimated_price, updated_at")
+      .eq("status", "finished")
+      .gte("updated_at", sixMonthsAgo),
+    supabase
+      .from("service_requests")
+      .select("final_price, estimated_price, updated_at")
+      .eq("status", "finished")
+      .gte("updated_at", sixMonthsAgo),
+    // Motoristas com mais viagens finalizadas nos últimos 30 dias.
+    supabase
+      .from("trips")
+      .select(
+        "driver_profile_id, driver_profiles(provider_profiles(users(full_name, avatar_url)))",
+      )
+      .eq("status", "finished")
+      .gte("updated_at", thirtyDaysAgo)
+      .not("driver_profile_id", "is", null),
     supabase.from("ratings").select("rating"),
     supabase
       .from("driver_profiles")
@@ -1444,6 +1468,9 @@ export async function fetchDashboardStats() {
   const services = servicesResult.data ?? [];
   const paidTrips = paidTripsResult.data ?? [];
   const paidServices = paidServicesResult.data ?? [];
+  const finishedTripsHistoric = finishedTripsHistoricResult.data ?? [];
+  const finishedServicesHistoric = finishedServicesHistoricResult.data ?? [];
+  const topDriversRows = topDriversResult.data ?? [];
   const ratings = ratingsResult.data ?? [];
 
   // ── Revenue ────────────────────────────────────────────
@@ -1453,13 +1480,25 @@ export async function fetchDashboardStats() {
     updated_at: string;
   }) => t.payment_date ?? t.updated_at;
 
-  const revenueThisMonth =
+  // Receita do mês agora inclui TAMBÉM os pendentes (finished + !is_paid) —
+  // decisão do produto: pendente ainda conta como receita esperada do mês.
+  const revenuePaidThisMonth =
     paidTrips
       .filter((t) => tripEffectiveDate(t) >= startOfThisMonth)
       .reduce((s, t) => s + (t.final_price ?? 0), 0) +
     paidServices
       .filter((s) => s.updated_at >= startOfThisMonth)
       .reduce((s, t) => s + (t.final_price ?? 0), 0);
+
+  const pendingRevenue =
+    trips
+      .filter((t) => t.status === "finished" && !t.is_paid)
+      .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0) +
+    services
+      .filter((s) => s.status === "finished" && !s.is_paid)
+      .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0);
+
+  const revenueThisMonth = revenuePaidThisMonth + pendingRevenue;
 
   const revenueLastMonth =
     paidTrips
@@ -1479,14 +1518,6 @@ export async function fetchDashboardStats() {
     revenueLastMonth > 0
       ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
       : null;
-
-  const pendingRevenue =
-    trips
-      .filter((t) => t.status === "finished" && !t.is_paid)
-      .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0) +
-    services
-      .filter((s) => s.status === "finished" && !s.is_paid)
-      .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0);
 
   const allPaid = [...paidTrips, ...paidServices].filter(
     (i) => (i.final_price ?? 0) > 0,
@@ -1560,28 +1591,65 @@ export async function fetchDashboardStats() {
     };
   });
 
-  paidTrips.forEach((t) => {
-    if (!t.final_price) return;
-    const d = new Date(t.payment_date ?? t.updated_at);
+  // Popula com trips/services FINISHED (não só pagos) usando updated_at.
+  // Cobrindo tanto historico pago quanto pendente permite o grafico
+  // ter valores mesmo antes de tudo ser marcado como is_paid.
+  finishedTripsHistoric.forEach((t) => {
+    const value = t.final_price ?? t.estimated_price ?? 0;
+    if (value <= 0) return;
+    const d = new Date(t.updated_at);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const slot = monthlyRevenue.find((m) => m.month === key);
-    if (slot) slot.trips += t.final_price;
+    if (slot) slot.trips += value;
   });
 
-  paidServices.forEach((s) => {
-    if (!s.final_price) return;
+  finishedServicesHistoric.forEach((s) => {
+    const value = s.final_price ?? s.estimated_price ?? 0;
+    if (value <= 0) return;
     const d = new Date(s.updated_at);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const slot = monthlyRevenue.find((m) => m.month === key);
-    if (slot) slot.services += s.final_price;
+    if (slot) slot.services += value;
   });
 
-  // ── Payment method distribution ────────────────────────
+  // ── Payment method distribution (mantido para retrocompat) ─────
   const paymentMap: Record<string, number> = {};
   [...paidTrips, ...paidServices].forEach((item) => {
     const m = item.payment_method ?? "outro";
     paymentMap[m] = (paymentMap[m] ?? 0) + 1;
   });
+
+  // ── Top drivers (últimos 30 dias, por # de viagens finalizadas) ────
+  const driverAggregates = new Map<
+    string,
+    { fullName: string; avatarUrl: string | null; count: number }
+  >();
+  for (const row of topDriversRows) {
+    const id = row.driver_profile_id;
+    if (!id) continue;
+    // Supabase pode retornar joins nested como Map ou Array — normalizar.
+    const dp = Array.isArray(row.driver_profiles)
+      ? row.driver_profiles[0]
+      : row.driver_profiles;
+    const pp = Array.isArray(dp?.provider_profiles)
+      ? dp?.provider_profiles[0]
+      : dp?.provider_profiles;
+    const u = Array.isArray(pp?.users) ? pp?.users[0] : pp?.users;
+    const existing = driverAggregates.get(id);
+    if (existing) {
+      existing.count++;
+    } else {
+      driverAggregates.set(id, {
+        fullName: (u?.full_name as string | undefined) ?? "Motorista",
+        avatarUrl: (u?.avatar_url as string | null | undefined) ?? null,
+        count: 1,
+      });
+    }
+  }
+  const topDrivers = Array.from(driverAggregates.entries())
+    .map(([driverProfileId, v]) => ({ driverProfileId, ...v }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
   // ── Status distributions ───────────────────────────────
   const tripStatusMap: Record<string, number> = {};
@@ -1623,6 +1691,7 @@ export async function fetchDashboardStats() {
     totalServices: services.length,
     monthlyRevenue,
     paymentMap,
+    topDrivers,
     tripStatusMap,
     serviceStatusMap,
     alertAwaitingClient,

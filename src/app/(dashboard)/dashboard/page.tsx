@@ -29,6 +29,7 @@ interface DashboardData {
   totalServices: number;
   monthlyRevenue: MonthlyBar[];
   paymentMap: Record<string, number>;
+  topDrivers: TopDriver[];
   tripStatusMap: Record<string, number>;
   serviceStatusMap: Record<string, number>;
   alertAwaitingClient: number;
@@ -37,6 +38,13 @@ interface DashboardData {
   alertUnpaidFinished: number;
   recentTrips: RecentTrip[];
   recentServices: RecentService[];
+}
+
+interface TopDriver {
+  driverProfileId: string;
+  fullName: string;
+  avatarUrl: string | null;
+  count: number;
 }
 
 interface RecentTrip {
@@ -393,7 +401,6 @@ export default function DashboardPage() {
   // Animated KPI values
   const revenue = useCountUp(data?.revenueThisMonth ?? 0, 1000);
   const pending = useCountUp(data?.pendingRevenue ?? 0, 950);
-  const ticket = useCountUp(data?.avgTicket ?? 0, 900);
   const activeOps = useCountUp(data?.activeOps ?? 0, 750);
   const completion = useCountUp(data?.completionRate ?? 0, 800);
   const avgRating = useCountUp(data?.avgRating ?? 0, 750, 1);
@@ -536,16 +543,6 @@ export default function DashboardPage() {
       ),
     },
     {
-      label: "Ticket Médio",
-      value: formatCurrency(ticket),
-      accent: "#A855F7",
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
-        </svg>
-      ),
-    },
-    {
       label: "Ops. Ativas",
       value: String(activeOps),
       accent: "#22C55E",
@@ -613,9 +610,9 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Zone 1: KPI Cards ───────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {loading
-          ? Array.from({ length: 6 }).map((_, i) => (
+          ? Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-[88px]" />
             ))
           : kpiCards.map((card, i) => (
@@ -698,7 +695,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Payment methods donut */}
+        {/* Top drivers (últimos 30 dias) */}
         <div
           className="bg-surface rounded-xl border border-border p-5"
           style={{
@@ -707,36 +704,66 @@ export default function DashboardPage() {
             transition: "opacity 0.5s ease 0.42s, transform 0.5s ease 0.42s",
           }}
         >
-          <h2 className="font-heading font-black text-dark text-sm mb-4">
-            Métodos de Pagamento
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-heading font-black text-dark text-sm">
+              Motoristas em destaque
+            </h2>
+            <span className="text-xs text-contrast">30d</span>
+          </div>
           {loading ? (
-            <div className="flex items-center gap-4">
-              <Skeleton className="w-28 h-28 rounded-full shrink-0" />
-              <div className="flex-1 space-y-2">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-3" />
-                ))}
-              </div>
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+                  <Skeleton className="flex-1 h-3" />
+                  <Skeleton className="w-8 h-4" />
+                </div>
+              ))}
             </div>
-          ) : (
-            <DonutChart
-              data={data?.paymentMap ?? {}}
-              loaded={loaded}
-              size={108}
-            />
-          )}
-          {!loading && (
-            <p className="text-xs text-contrast mt-4 pt-4 border-t border-border">
-              Total:{" "}
-              <span className="font-heading font-black text-dark tabular-nums">
-                {Object.values(data?.paymentMap ?? {}).reduce(
-                  (s, v) => s + v,
-                  0
-                )}{" "}
-                transações
-              </span>
+          ) : (data?.topDrivers?.length ?? 0) === 0 ? (
+            <p className="text-xs text-contrast/60 text-center py-6">
+              Nenhuma viagem finalizada nos últimos 30 dias.
             </p>
+          ) : (
+            <ol className="space-y-2.5">
+              {data!.topDrivers.map((d, i) => {
+                const initial = d.fullName.charAt(0).toUpperCase() || "?";
+                return (
+                  <li
+                    key={d.driverProfileId}
+                    className="flex items-center gap-3"
+                    style={{
+                      opacity: loaded ? 1 : 0,
+                      transform: loaded ? "translateX(0)" : "translateX(-6px)",
+                      transition: `opacity 0.4s ease ${0.5 + i * 0.06}s, transform 0.4s ease ${0.5 + i * 0.06}s`,
+                    }}
+                  >
+                    <span className="text-xs text-contrast font-heading font-black w-4 tabular-nums shrink-0">
+                      {i + 1}
+                    </span>
+                    <div className="w-9 h-9 rounded-full overflow-hidden bg-surface-hover shrink-0 flex items-center justify-center">
+                      {d.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={d.avatarUrl}
+                          alt={d.fullName}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-dark">{initial}</span>
+                      )}
+                    </div>
+                    <span className="flex-1 text-sm text-dark truncate">
+                      {d.fullName}
+                    </span>
+                    <span className="text-xs font-heading font-black text-dark tabular-nums shrink-0">
+                      {d.count} {d.count === 1 ? "corrida" : "corridas"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </div>
       </div>
