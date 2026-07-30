@@ -1740,6 +1740,7 @@ export async function createServiceCategory(input: {
 // ─── Addresses ─────────────────────────────────────────────
 export async function createAddress(address: {
   formatted_address: string;
+  google_place_id?: string;
   street?: string;
   number?: string;
   complement?: string;
@@ -1747,6 +1748,8 @@ export async function createAddress(address: {
   city?: string;
   state?: string;
   zip_code?: string;
+  latitude?: number;
+  longitude?: number;
 }) {
   const { data, error } = await supabase
     .from("addresses")

@@ -13,6 +13,9 @@ import {
 } from "@/lib/api";
 import type { ServiceCategory, User } from "@/types/database";
 import NovaCategoriaServicoModal from "@/components/forms/NovaCategoriaServicoModal";
+import AddressAutocompleteInput, {
+  type SelectedAddress,
+} from "@/components/forms/AddressAutocompleteInput";
 
 interface NovaSolicitacaoFormProps {
   open: boolean;
@@ -42,6 +45,7 @@ export default function NovaSolicitacaoForm({
   const [categoryId, setCategoryId] = useState("");
   const [serviceDate, setServiceDate] = useState("");
   const [address, setAddress] = useState("");
+  const [addressSelection, setAddressSelection] = useState<SelectedAddress | null>(null);
   const [description, setDescription] = useState("");
   const [observations, setObservations] = useState("");
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
@@ -109,9 +113,23 @@ export default function NovaSolicitacaoForm({
     try {
       let addressId: string | null = null;
       if (address.trim()) {
-        const createdAddress = await createAddress({
-          formatted_address: address.trim(),
-        });
+        const selection = addressSelection;
+        const createdAddress = await createAddress(
+          selection && selection.formatted_address === address
+            ? {
+                formatted_address: selection.formatted_address,
+                google_place_id: selection.google_place_id,
+                street: selection.street,
+                number: selection.number,
+                neighborhood: selection.neighborhood,
+                city: selection.city,
+                state: selection.state,
+                zip_code: selection.zip_code,
+                latitude: selection.latitude,
+                longitude: selection.longitude,
+              }
+            : { formatted_address: address.trim() },
+        );
         addressId = createdAddress.id;
       }
 
@@ -256,13 +274,19 @@ export default function NovaSolicitacaoForm({
                 <label htmlFor="address" className={labelClass}>
                   Endereço
                 </label>
-                <input
-                  id="address"
-                  type="text"
+                <AddressAutocompleteInput
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(raw) => {
+                    setAddress(raw);
+                    if (addressSelection && raw !== addressSelection.formatted_address) {
+                      setAddressSelection(null);
+                    }
+                  }}
+                  onSelect={(sel) => {
+                    setAddressSelection(sel);
+                    setAddress(sel.formatted_address);
+                  }}
                   placeholder="Ex: Rua das Flores, 123 - Centro"
-                  className={inputClass}
                 />
               </div>
 

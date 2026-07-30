@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SERVICE_AREA_BOUNDS } from "@/lib/google-maps-config";
 
 type GoogleAutocompleteSuggestion = {
   placePrediction?: {
@@ -49,6 +50,20 @@ export async function POST(request: NextRequest) {
       input,
       includedRegionCodes: ["br"],
       languageCode: "pt-BR",
+      // Prioriza resultados da região atendida (RMSP + Campinas + Vale do
+      // Paraíba + Vinhedo/Louveira etc). Não exclui outras cidades do BR.
+      locationBias: {
+        rectangle: {
+          low: {
+            latitude: SERVICE_AREA_BOUNDS.south,
+            longitude: SERVICE_AREA_BOUNDS.west,
+          },
+          high: {
+            latitude: SERVICE_AREA_BOUNDS.north,
+            longitude: SERVICE_AREA_BOUNDS.east,
+          },
+        },
+      },
     }),
   });
 
