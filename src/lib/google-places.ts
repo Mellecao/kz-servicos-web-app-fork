@@ -80,14 +80,36 @@ export async function fetchGooglePlaceDetails(
     }
 
     const data = (await response.json()) as GooglePlaceAddress;
-    return {
-      ...data,
-      formatted_address: data.formatted_address || fallbackLabel,
-      google_place_id: data.google_place_id || placeId,
-    };
+    return preserveStreetNumberFromLabel(
+      {
+        ...data,
+        formatted_address: data.formatted_address || fallbackLabel,
+        google_place_id: data.google_place_id || placeId,
+      },
+      fallbackLabel,
+    );
   } catch {
     return toFallbackAddress(placeId, fallbackLabel);
   }
+}
+
+// Google resolve endereços sem número exato na base para o nível de rua:
+// o details volta sem street_number mesmo quando a predição clicada exibia
+// o número digitado. Nesses casos, mantém o texto da predição.
+export function preserveStreetNumberFromLabel(
+  address: GooglePlaceAddress,
+  predictionLabel: string,
+): GooglePlaceAddress {
+  if (address.number) return address;
+
+  const match = predictionLabel.match(/^[^,]+,\s*(\d+[a-zA-Z]?)(?=[\s,-]|$)/);
+  if (!match) return address;
+
+  return {
+    ...address,
+    number: match[1],
+    formatted_address: predictionLabel,
+  };
 }
 
 async function fetchGooglePlacePredictions(query: string): Promise<PlaceOption[]> {

@@ -15,6 +15,10 @@ import {
   GOOGLE_MAPS_LIBRARIES,
   assertGoogleMapsApiKey,
 } from "@/lib/google-maps-config";
+import {
+  DRIVER_MAP_COLOR_SCHEME,
+  DRIVER_MAP_STYLES,
+} from "@/lib/driver-map-style";
 import DriverMarker from "@/components/mapa/DriverMarker";
 import DriverPopup from "@/components/mapa/DriverPopup";
 import DriverSearchInput from "@/components/mapa/DriverSearchInput";
@@ -173,6 +177,8 @@ export default function MapaClient() {
             mapContainerStyle={MAP_CONTAINER_STYLE}
             onLoad={onMapLoad}
             options={{
+              colorScheme: DRIVER_MAP_COLOR_SCHEME,
+              styles: DRIVER_MAP_STYLES,
               streetViewControl: false,
               mapTypeControl: false,
               fullscreenControl: false,

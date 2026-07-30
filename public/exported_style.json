@@ -1,0 +1,721 @@
+{
+  "variant": "dark",
+  "styles": [
+    {
+      "id": "infrastructure",
+      "geometry": {
+        "visible": true
+      }
+    },
+    {
+      "id": "infrastructure.building",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.building.commercial",
+      "geometry": {
+        "visible": true
+      }
+    },
+    {
+      "id": "infrastructure.building.indoor",
+      "geometry": {
+        "visible": true
+      }
+    },
+    {
+      "id": "infrastructure.businessCorridor",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.railwayTrack",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.railwayTrack.commercial",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.railwayTrack.commuter",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.noTraffic",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.noTraffic.pedestrianMall",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.noTraffic.trail",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.noTraffic.trail.paved",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.noTraffic.trail.unpaved",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.ramp",
+      "geometry": {
+        "visible": true
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.road.arterial",
+      "geometry": {
+        "fillOpacity": 1,
+        "fillColor": "#8f8f8f"
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.road.highway",
+      "geometry": {
+        "fillOpacity": 1,
+        "fillColor": "#8f8f8f",
+        "strokeOpacity": 1,
+        "strokeColor": "#121212"
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.road.local",
+      "geometry": {
+        "fillOpacity": 1,
+        "fillColor": "#8f8f8f"
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.road.noOutlet",
+      "geometry": {
+        "fillOpacity": 1,
+        "fillColor": "#8f8f8f",
+        "strokeOpacity": 1,
+        "strokeColor": "#030303"
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.roadDetail.directionArrow",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.roadDetail.marking",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.roadNetwork.roadDetail.surface",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.busStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.ferryTerminal",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.funicularStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.gondolaStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.monorail",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.railStation.subwayStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.transitStation.railStation.tramStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "infrastructure.urbanArea",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.archipelago",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.base",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.island",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover.crops",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover.dryCrops",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover.forest",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover.ice",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover.shrub",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.land.landCover.tundra",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.water",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.water.lake",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "natural.water.river",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.emergency.fire",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.emergency.hospital",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.emergency.pharmacy",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.emergency.police",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.arts",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.casino",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.cinema",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.historic",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.museum",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.themePark",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.entertainment.touristAttraction",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.foodAndDrink",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.foodAndDrink.bar",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.foodAndDrink.cafe",
+      "label": {
+        "visible": true
+      }
+    },
+    {
+      "id": "pointOfInterest.foodAndDrink.restaurant",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.foodAndDrink.winery",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.landmark",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.lodging",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.bridge",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.cemetery",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.government",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.library",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.military",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.buddhist",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.christian",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.hindu",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.islamic",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.jain",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.jewish",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.shinto",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.placeOfWorship.sikh",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.school",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.other.townSquare",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.beach",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.boating",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.fishing",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.golfCourse",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.hotSpring",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.natureReserve",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.park",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.peak",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.sportsComplex",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.sportsField",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.trailhead",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.recreation.zoo",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.retail",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.retail.grocery",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.retail.shopping",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.atm",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.bank",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.carRental",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.evCharging",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.gasStation",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.parkingLot",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.postOffice",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.restroom",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.service.restStop",
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.transit",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "pointOfInterest.transit.airport",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "political.city",
+      "label": {
+        "textFillOpacity": 1,
+        "textFillColor": "#fbd960"
+      }
+    },
+    {
+      "id": "political.landParcel",
+      "geometry": {
+        "visible": false
+      }
+    },
+    {
+      "id": "political.reservation",
+      "geometry": {
+        "visible": false
+      },
+      "label": {
+        "visible": false
+      }
+    },
+    {
+      "id": "political.sublocality",
+      "label": {
+        "visible": true,
+        "textFillOpacity": 1,
+        "textFillColor": "#fee690"
+      }
+    }
+  ]
+}
