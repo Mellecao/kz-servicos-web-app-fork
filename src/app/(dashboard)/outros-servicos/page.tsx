@@ -124,7 +124,9 @@ export default function OutrosServicosPage() {
         title: r.description.length > 50 ? r.description.slice(0, 50) + "…" : r.description,
         subtitle: r.users?.full_name ?? "—",
         date: formatDate(r.service_date),
-        ...(r.service_categories
+        ...(r.freeform_profession
+          ? { tag: `👤 ${r.freeform_profession}`, tagColor: "#8B5CF6" }
+          : r.service_categories
           ? { tag: r.service_categories.name, tagColor: "#2261FE" }
           : {}),
         ...(r.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),

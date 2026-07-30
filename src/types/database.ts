@@ -288,7 +288,8 @@ export interface ServiceRequest {
   id: string;
   client_id: string;
   provider_profile_id: string | null;
-  service_category_id: string;
+  service_category_id: string | null;
+  freeform_profession: string | null;
   service_date: string;
   description: string;
   status: ServiceRequestStatus;

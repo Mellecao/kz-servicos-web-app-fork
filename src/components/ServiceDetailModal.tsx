@@ -441,7 +441,14 @@ export default function ServiceDetailModal({
               }
             />
             <InfoRow label="Cliente" value={r.users?.full_name ?? "—"} />
-            <InfoRow label="Categoria" value={r.service_categories?.name ?? "—"} />
+            {r.freeform_profession ? (
+              <InfoRow
+                label="Profissional pedido"
+                value={<span className="font-semibold">👤 {r.freeform_profession}</span>}
+              />
+            ) : (
+              <InfoRow label="Categoria" value={r.service_categories?.name ?? "—"} />
+            )}
             <InfoRow label="Data do serviço" value={formatDate(r.service_date)} />
 
             {r.addresses && (
@@ -535,6 +542,36 @@ export default function ServiceDetailModal({
                   Adicionar
                 </button>
               </div>
+
+              {availableProviders.length > 0 && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`Convidar todos os ${availableProviders.length} prestadores aprovados disponíveis?`)) return;
+                      setCandidateActioningId("__bulk__");
+                      try {
+                        for (const provider of availableProviders) {
+                          try {
+                            const created = await addServiceRequestProviderCandidate(r.id, provider.id);
+                            setCandidates((current) => [created, ...current]);
+                          } catch (e) {
+                            console.error(`Falha ao convidar ${provider.id}`, e);
+                          }
+                        }
+                        onUpdate?.();
+                        toast("success", "Convites enviados aos prestadores disponíveis");
+                      } finally {
+                        setCandidateActioningId(null);
+                      }
+                    }}
+                    disabled={candidateActioningId !== null}
+                    className="w-full rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-heading font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                  >
+                    👥 Convidar todos os prestadores aprovados ({availableProviders.length})
+                  </button>
+                </div>
+              )}
 
               <div className="mt-4 space-y-3">
                 {candidates.length === 0 ? (
