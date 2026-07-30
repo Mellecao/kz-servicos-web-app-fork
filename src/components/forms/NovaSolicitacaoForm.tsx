@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import { useToast } from "@/components/Toast";
 import { supabase } from "@/lib/supabase";
@@ -46,6 +46,7 @@ export default function NovaSolicitacaoForm({
   const [observations, setObservations] = useState("");
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const nextPreviews = photoFiles.map((file) => URL.createObjectURL(file));
@@ -310,39 +311,58 @@ export default function NovaSolicitacaoForm({
               </span>
             </div>
 
-            <label className="block">
-              <span className="sr-only">Selecionar fotos</span>
-              <input
-                id="request-photos"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={(e) => setPhotoFiles(Array.from(e.target.files ?? []))}
-                className={inputClass}
-              />
-            </label>
+            <input
+              ref={photoInputRef}
+              id="request-photos"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setPhotoFiles((current) => [...current, file]);
+                }
+                if (photoInputRef.current) {
+                  photoInputRef.current.value = "";
+                }
+              }}
+            />
 
-            {photoPreviews.length > 0 ? (
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-                {photoPreviews.map((preview, index) => (
-                  <div
-                    key={`${preview}-${index}`}
-                    className="overflow-hidden rounded-lg border border-border bg-background"
+            <div className="mt-2 grid grid-cols-3 gap-3 md:grid-cols-4">
+              {photoPreviews.map((preview, index) => (
+                <div
+                  key={`${preview}-${index}`}
+                  className="group relative overflow-hidden rounded-lg border border-border bg-background"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={preview}
+                    alt={`Prévia da foto ${index + 1}`}
+                    className="h-28 w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPhotoFiles((current) =>
+                        current.filter((_, i) => i !== index),
+                      )
+                    }
+                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white text-xs opacity-0 transition-opacity group-hover:opacity-100"
+                    aria-label={`Remover foto ${index + 1}`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={preview}
-                      alt={`Prévia da foto ${index + 1}`}
-                      className="h-28 w-full object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-contrast">
-                Nenhuma foto adicionada ainda.
-              </div>
-            )}
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="flex h-28 w-full items-center justify-center rounded-lg border-2 border-dashed border-border bg-background text-3xl text-contrast hover:border-primary hover:text-primary transition-colors"
+                aria-label="Adicionar foto"
+              >
+                +
+              </button>
+            </div>
           </section>
         </form>
       </SlidePanel>
