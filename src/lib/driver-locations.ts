@@ -82,10 +82,14 @@ export function parseActiveDriverRow(row: RawDriverLocationRow): ActiveDriverLoc
   };
 }
 
-// Janela larga: motoristas param de publicar GPS quando fecham o app ou
-// saem de corrida ativa. 10min excluía quase todo mundo. 30min é um
-// compromisso entre "quem está online agora" e realidade operacional.
-const ACTIVE_WINDOW_MINUTES = 30;
+// Motoristas com GPS mais antigo que isso viram "cinza" (stale) no mapa
+// mas continuam visíveis na última posição conhecida.
+export const STALE_THRESHOLD_MINUTES = 30;
+
+export function isDriverLocationStale(updatedAtIso: string, nowMs: number = Date.now()): boolean {
+  const age = nowMs - new Date(updatedAtIso).getTime();
+  return age >= STALE_THRESHOLD_MINUTES * 60_000;
+}
 
 const SELECT_COLUMNS = `
   driver_profile_id,
@@ -103,13 +107,13 @@ const SELECT_COLUMNS = `
   )
 `;
 
+/// Retorna a última localização de TODOS os motoristas aprovados.
+/// O consumidor decide o que fazer com stale (ver `isDriverLocationStale`).
 export async function fetchActiveDrivers(): Promise<ActiveDriverLocation[]> {
   const { supabase } = await import("@/lib/supabase");
-  const cutoffIso = new Date(Date.now() - ACTIVE_WINDOW_MINUTES * 60_000).toISOString();
   const { data, error } = await supabase
     .from("driver_locations")
     .select(SELECT_COLUMNS)
-    .gt("updated_at", cutoffIso)
     .eq("driver_profiles.provider_profiles.status", "approved");
 
   if (error) throw error;

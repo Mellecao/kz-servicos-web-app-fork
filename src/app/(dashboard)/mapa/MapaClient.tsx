@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import {
   fetchActiveDrivers,
   fetchDriverMeta,
+  isDriverLocationStale,
   type ActiveDriverLocation,
 } from "@/lib/driver-locations";
 import {
@@ -19,9 +20,9 @@ import DriverPopup from "@/components/mapa/DriverPopup";
 import DriverSearchInput from "@/components/mapa/DriverSearchInput";
 import ActiveDriverCounter from "@/components/mapa/ActiveDriverCounter";
 
-// Mantido em sincronia com ACTIVE_WINDOW_MINUTES em src/lib/driver-locations.ts.
-const ACTIVE_WINDOW_MS = 30 * 60_000;
-const EXPIRY_TICK_MS = 60_000;
+// Ticks a cada 60s pra re-avaliar isStale conforme o tempo passa
+// (sem remover markers — motorista offline vira cinza, não some).
+const STALE_TICK_MS = 60_000;
 const FOCUS_ZOOM = 15;
 
 const MAP_CONTAINER_STYLE: React.CSSProperties = {
@@ -41,6 +42,7 @@ export default function MapaClient() {
   const [drivers, setDrivers] = useState<ActiveDriverLocation[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const mapRef = useRef<google.maps.Map | null>(null);
 
   // Initial fetch
@@ -103,16 +105,16 @@ export default function MapaClient() {
     };
   }, []);
 
-  // Timer de expiração
+  // Re-avalia isStale a cada 60s sem remover markers.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const cutoff = Date.now() - ACTIVE_WINDOW_MS;
-      setDrivers((prev) =>
-        prev.filter((d) => new Date(d.updatedAt).getTime() >= cutoff)
-      );
-    }, EXPIRY_TICK_MS);
+    const interval = setInterval(() => setNowMs(Date.now()), STALE_TICK_MS);
     return () => clearInterval(interval);
   }, []);
+
+  const activeCount = useMemo(
+    () => drivers.filter((d) => !isDriverLocationStale(d.updatedAt, nowMs)).length,
+    [drivers, nowMs]
+  );
 
   const selectedDriver = useMemo(
     () => drivers.find((d) => d.driverProfileId === selectedDriverId) ?? null,
@@ -152,7 +154,11 @@ export default function MapaClient() {
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-dark">Mapa em tempo real</h1>
-          <ActiveDriverCounter count={drivers.length} />
+          <ActiveDriverCounter count={activeCount} />
+          <p className="text-xs text-contrast mt-1">
+            {drivers.length} motorista{drivers.length === 1 ? "" : "s"} rastreado
+            {drivers.length === 1 ? "" : "s"} · offline em cinza
+          </p>
         </div>
         <DriverSearchInput drivers={drivers} onSelect={onSelectFromSearch} />
       </div>
@@ -176,6 +182,7 @@ export default function MapaClient() {
               <DriverMarker
                 key={d.driverProfileId}
                 driver={d}
+                isStale={isDriverLocationStale(d.updatedAt, nowMs)}
                 onClick={setSelectedDriverId}
               />
             ))}
