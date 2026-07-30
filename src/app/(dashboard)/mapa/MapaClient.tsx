@@ -19,7 +19,8 @@ import DriverPopup from "@/components/mapa/DriverPopup";
 import DriverSearchInput from "@/components/mapa/DriverSearchInput";
 import ActiveDriverCounter from "@/components/mapa/ActiveDriverCounter";
 
-const ACTIVE_WINDOW_MS = 10 * 60_000;
+// Mantido em sincronia com ACTIVE_WINDOW_MINUTES em src/lib/driver-locations.ts.
+const ACTIVE_WINDOW_MS = 30 * 60_000;
 const EXPIRY_TICK_MS = 60_000;
 const FOCUS_ZOOM = 15;
 

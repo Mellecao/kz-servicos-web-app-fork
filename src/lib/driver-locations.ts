@@ -82,7 +82,10 @@ export function parseActiveDriverRow(row: RawDriverLocationRow): ActiveDriverLoc
   };
 }
 
-const ACTIVE_WINDOW_MINUTES = 10;
+// Janela larga: motoristas param de publicar GPS quando fecham o app ou
+// saem de corrida ativa. 10min excluía quase todo mundo. 30min é um
+// compromisso entre "quem está online agora" e realidade operacional.
+const ACTIVE_WINDOW_MINUTES = 30;
 
 const SELECT_COLUMNS = `
   driver_profile_id,

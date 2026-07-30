@@ -6,6 +6,7 @@ import KanbanListView, { type KanbanListColumn } from "@/components/KanbanListVi
 import ServiceDetailModal from "@/components/ServiceDetailModal";
 import NovaSolicitacaoForm from "@/components/forms/NovaSolicitacaoForm";
 import { useToast } from "@/components/Toast";
+import { supabase } from "@/lib/supabase";
 import {
   fetchServiceRequestProviderCandidates,
   fetchServiceRequests,
@@ -65,12 +66,29 @@ export default function OutrosServicosPage() {
     setLoading(true);
     fetchServiceRequests()
       .then(setRequests)
-      .catch(() => {})
+      .catch((error) => {
+        console.error("[outros-servicos] fetchServiceRequests error:", error);
+        toast("danger", "Erro ao carregar solicitações");
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadRequests();
+  }, [loadRequests]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("outros-servicos-board")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "service_requests" },
+        () => loadRequests(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadRequests]);
 
   const handleCardMove = useCallback(
