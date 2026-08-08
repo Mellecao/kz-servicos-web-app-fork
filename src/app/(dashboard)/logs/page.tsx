@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchAdminLogs } from "@/lib/api";
-import type { AdminLog } from "@/types/database";
+import { fetchAdminLogs, fetchTripById } from "@/lib/api";
+import TripDetailModal from "@/components/TripDetailModal";
+import { useToast } from "@/components/Toast";
+import { isLogClickable } from "@/lib/admin-log-utils";
+import type { AdminLog, Trip } from "@/types/database";
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("pt-BR", {
@@ -48,8 +51,11 @@ function DetailsBadge({ details }: { details: Record<string, unknown> | null }) 
 }
 
 export default function LogsPage() {
+  const { toast } = useToast();
   const [logs, setLogs] = useState<AdminLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [loadingLogId, setLoadingLogId] = useState<string | null>(null);
 
   const loadLogs = useCallback(() => {
     setLoading(true);
@@ -64,6 +70,22 @@ export default function LogsPage() {
     const interval = setInterval(loadLogs, 30_000);
     return () => clearInterval(interval);
   }, [loadLogs]);
+
+  const handleLogClick = useCallback(
+    async (log: AdminLog) => {
+      if (!isLogClickable(log) || loadingLogId) return;
+      setLoadingLogId(log.id);
+      try {
+        const trip = await fetchTripById(log.entity_id as string);
+        setSelectedTrip(trip);
+      } catch {
+        toast("warning", "Não foi possível encontrar os detalhes desta corrida.");
+      } finally {
+        setLoadingLogId(null);
+      }
+    },
+    [toast, loadingLogId],
+  );
 
   return (
     <div>
@@ -103,11 +125,16 @@ export default function LogsPage() {
         <div className="flex flex-col gap-3">
           {logs.map((log) => {
             const color = actionColor(log.action);
-            return (
-              <div
-                key={log.id}
-                className="bg-surface border border-border rounded-xl px-5 py-4"
-              >
+            const clickable = isLogClickable(log);
+            const isLoadingRow = loadingLogId === log.id;
+            const rowClassName = `bg-surface border border-border rounded-xl px-5 py-4${
+              clickable
+                ? " w-full text-left transition-colors hover:border-primary/40 hover:bg-background cursor-pointer disabled:cursor-wait disabled:opacity-70"
+                : ""
+            }`;
+
+            const rowContent = (
+              <>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     {/* Action badge */}
@@ -145,18 +172,45 @@ export default function LogsPage() {
                         <circle cx="12" cy="9" r="2.5" />
                       </svg>
                       <span className="font-mono text-xs text-contrast/70 truncate max-w-[180px]">
-                        {log.entity_id}
+                        {isLoadingRow ? "Carregando..." : log.entity_id}
                       </span>
                     </div>
                   )}
                 </div>
 
                 <DetailsBadge details={log.details} />
+              </>
+            );
+
+            if (clickable) {
+              return (
+                <button
+                  key={log.id}
+                  type="button"
+                  onClick={() => handleLogClick(log)}
+                  disabled={isLoadingRow}
+                  className={rowClassName}
+                >
+                  {rowContent}
+                </button>
+              );
+            }
+
+            return (
+              <div key={log.id} className={rowClassName}>
+                {rowContent}
               </div>
             );
           })}
         </div>
       )}
+
+      <TripDetailModal
+        trip={selectedTrip}
+        open={!!selectedTrip}
+        onClose={() => setSelectedTrip(null)}
+        onUpdate={loadLogs}
+      />
     </div>
   );
 }
