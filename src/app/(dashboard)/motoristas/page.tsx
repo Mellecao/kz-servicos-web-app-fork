@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  deleteUserById,
+  deleteDriverById,
   deleteDriverProfilePhoto,
   deleteVehiclePhoto,
   fetchDriverPerformance,
@@ -306,13 +306,13 @@ export default function MotoristasPage() {
     }
 
     const confirmed = window.confirm(
-      `Excluir ${name}? Essa ação apaga o motorista, veículo e perfil de acesso.`,
+      `Excluir ${name}? Essa ação remove o acesso, o perfil do motorista e o veículo. O histórico será preservado de forma anônima.`,
     );
     if (!confirmed) return;
 
     setDeletingUserId(userId);
     try {
-      await deleteUserById(userId);
+      await deleteDriverById(driver.id);
       toast("success", "Motorista excluído com sucesso.");
       await loadDrivers();
     } catch (err) {

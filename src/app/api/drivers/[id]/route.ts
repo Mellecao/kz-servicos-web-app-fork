@@ -148,6 +148,161 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id: driverProfileId } = await params;
+    if (!driverProfileId) {
+      return NextResponse.json(
+        { error: "ID do motorista é obrigatório" },
+        { status: 400 },
+      );
+    }
+
+    const admin = getSupabaseAdmin();
+    const authorizationError = await authorizeAdmin(request, admin);
+    if (authorizationError) return authorizationError;
+
+    const { data: driverProfile, error: driverError } = await admin
+      .from("driver_profiles")
+      .select("provider_profile_id")
+      .eq("id", driverProfileId)
+      .maybeSingle();
+
+    if (driverError) {
+      return NextResponse.json({ error: driverError.message }, { status: 400 });
+    }
+    if (!driverProfile) {
+      return NextResponse.json(
+        { error: "Motorista não encontrado" },
+        { status: 404 },
+      );
+    }
+
+    const { data: providerProfile, error: providerError } = await admin
+      .from("provider_profiles")
+      .select("user_id")
+      .eq("id", driverProfile.provider_profile_id)
+      .single();
+
+    if (providerError || !providerProfile) {
+      return NextResponse.json(
+        { error: providerError?.message || "Usuário do motorista não encontrado" },
+        { status: 400 },
+      );
+    }
+
+    const userId = providerProfile.user_id;
+
+    // A exclusão rígida de auth.users dispara a cascata para public.users e é
+    // bloqueada por históricos com ON DELETE RESTRICT (avaliações, mensagens,
+    // cancelamentos etc.). A exclusão suave remove definitivamente o acesso
+    // sem apagar o identificador necessário para preservar esses históricos.
+    const { error: authDeleteError } = await admin.auth.admin.deleteUser(
+      userId,
+      true,
+    );
+    if (authDeleteError) {
+      return NextResponse.json(
+        { error: `Não foi possível remover o acesso do motorista: ${authDeleteError.message}` },
+        { status: 400 },
+      );
+    }
+
+    const deletedAt = new Date().toISOString();
+    const { error: userError } = await admin
+      .from("users")
+      .update({
+        full_name: "Conta excluída",
+        email: `deleted+${userId}@deleted.invalid`,
+        phone: null,
+        cpf: null,
+        avatar_url: null,
+        date_of_birth: null,
+        is_active: false,
+        deleted_at: deletedAt,
+      })
+      .eq("id", userId);
+
+    if (userError) {
+      console.error("Falha ao anonimizar motorista excluído", {
+        driverProfileId,
+        userId,
+        error: userError.message,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "O acesso foi removido, mas não foi possível anonimizar o histórico do motorista.",
+        },
+        { status: 500 },
+      );
+    }
+
+    // provider_profiles -> driver_profiles -> vehicles/photos/locations usam
+    // ON DELETE CASCADE. Viagens antigas preservam o histórico com motorista
+    // nulo, conforme a FK de trips.driver_profile_id.
+    const { error: profileDeleteError } = await admin
+      .from("provider_profiles")
+      .delete()
+      .eq("id", driverProfile.provider_profile_id);
+
+    if (profileDeleteError) {
+      console.error("Falha ao remover perfil do motorista excluído", {
+        driverProfileId,
+        userId,
+        error: profileDeleteError.message,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "O acesso foi removido, mas não foi possível apagar o perfil do motorista.",
+        },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error("Erro ao excluir motorista", error);
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 },
+    );
+  }
+}
+
+async function authorizeAdmin(
+  request: Request,
+  admin: ReturnType<typeof getSupabaseAdmin>,
+): Promise<NextResponse | null> {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (!token) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
+  const { data: authData, error: authError } = await admin.auth.getUser(token);
+  if (authError || !authData.user) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
+  const { data: user, error: userError } = await admin
+    .from("users")
+    .select("role, is_active")
+    .eq("id", authData.user.id)
+    .single();
+
+  if (userError || user?.role !== "admin" || user.is_active === false) {
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  }
+
+  return null;
+}
+
 function normalizeVehicle(vehicle: DriverPatchBody["vehicle"]): {
   payload: {
     brand: string;

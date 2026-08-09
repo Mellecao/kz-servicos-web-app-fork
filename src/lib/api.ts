@@ -2109,6 +2109,20 @@ export async function deleteUserById(id: string): Promise<void> {
   if (!res.ok) throw new Error(data.error || "Erro ao excluir usuário");
 }
 
+export async function deleteDriverById(driverProfileId: string): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`/api/drivers/${encodeURIComponent(driverProfileId)}`, {
+    method: "DELETE",
+    headers: data.session?.access_token
+      ? { Authorization: `Bearer ${data.session.access_token}` }
+      : undefined,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload.error || "Erro ao excluir motorista");
+  }
+}
+
 // ─── Update User ───────────────────────────────────────────
 export async function updateUserById(
   id: string,
