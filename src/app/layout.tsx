@@ -24,17 +24,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className="h-full antialiased" suppressHydrationWarning>
-
       <body className="min-h-full flex flex-col font-body" suppressHydrationWarning>
+        <Script id="onesignal-deferred-bootstrap" strategy="beforeInteractive">
+          {`window.OneSignalDeferred = window.OneSignalDeferred || [];`}
+        </Script>
+        <Script
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+          strategy="afterInteractive"
+        />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
-      <Script id="onesignal-deferred-bootstrap" strategy="beforeInteractive">
-        {`window.OneSignalDeferred = window.OneSignalDeferred || [];`}
-      </Script>
-      <Script
-        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-        strategy="afterInteractive"
-      />
     </html>
   );
 }
