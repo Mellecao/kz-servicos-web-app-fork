@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import { useToast } from "@/components/Toast";
 import { createUser } from "@/lib/api";
+import { documentError, documentToSave, maskPhoneAO, phoneError, phoneToSave } from "@/lib/format";
 
 interface NovoUsuarioFormProps {
   open: boolean;
@@ -44,23 +45,35 @@ export default function NovoUsuarioForm({
       return;
     }
 
+    const phoneMsg = phoneError(phone, null);
+    if (phoneMsg) {
+      toast("warning", phoneMsg);
+      return;
+    }
+
+    const documentMsg = documentError(cpf, null);
+    if (documentMsg) {
+      toast("warning", documentMsg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       await createUser({
         full_name: fullName,
         email,
-        phone: phone || null,
-        cpf: cpf || null,
+        phone: phoneToSave(phone, null),
+        cpf: documentToSave(cpf, null),
         role: "admin",
         date_of_birth: dateOfBirth || null,
       });
 
-      toast("success", "Usuário criado com sucesso!");
+      toast("success", "Utilizador criado com sucesso!");
       resetForm();
       onSuccess();
       onClose();
     } catch {
-      toast("danger", "Erro ao criar usuário. Tente novamente.");
+      toast("danger", "Erro ao criar utilizador. Tente novamente.");
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +83,7 @@ export default function NovoUsuarioForm({
     <SlidePanel
       open={open}
       onClose={onClose}
-      title="Novo Usuário"
+      title="Novo Utilizador"
       footer={
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
           <button
@@ -84,9 +97,9 @@ export default function NovoUsuarioForm({
             type="submit"
             form="novo-usuario-form"
             disabled={submitting}
-            className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 rounded-lg bg-primary text-on-primary font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "Criando..." : "Criar Usuário"}
+            {submitting ? "A criar..." : "Criar Utilizador"}
           </button>
         </div>
       }
@@ -105,7 +118,7 @@ export default function NovoUsuarioForm({
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            placeholder="Nome do usuário"
+            placeholder="Nome do utilizador"
             className={inputClass}
           />
         </div>
@@ -132,22 +145,22 @@ export default function NovoUsuarioForm({
             id="user-phone"
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="(00) 00000-0000"
+            onChange={(e) => setPhone(maskPhoneAO(e.target.value))}
+            placeholder="+244 9XX XXX XXX"
             className={inputClass}
           />
         </div>
 
         <div>
           <label htmlFor="user-cpf" className={labelClass}>
-            CPF
+            BI / NIF
           </label>
           <input
             id="user-cpf"
             type="text"
             value={cpf}
             onChange={(e) => setCpf(e.target.value)}
-            placeholder="000.000.000-00"
+            placeholder="Nº do BI ou NIF"
             className={inputClass}
           />
         </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import BrandLogo from "@/components/BrandLogo";
 import { useAuth } from "@/lib/auth-context";
+import { BRAND } from "@/lib/brand";
 
 export default function MobileHeader() {
   const { userProfile, session } = useAuth();
@@ -10,7 +11,7 @@ export default function MobileHeader() {
   const displayName =
     userProfile?.full_name ||
     session?.user?.user_metadata?.full_name ||
-    "Usuário";
+    "Utilizador";
 
   const initials = displayName
     .split(" ")
@@ -22,22 +23,13 @@ export default function MobileHeader() {
   return (
     <header className="sticky top-0 z-30 h-14 flex md:hidden items-center justify-between px-4 border-b bg-surface border-border">
       {/* Logo */}
-      <Link href="/dashboard" className="flex items-center gap-2">
-        <Image
-          src="/assets/logo.png"
-          alt="KZ Servicos"
-          width={890}
-          height={494}
-          className="h-8 w-auto object-contain"
-        />
-        <span className="font-heading font-black text-base tracking-tight text-dark">
-          Painel ADM
-        </span>
+      <Link href="/dashboard" className="flex items-center" aria-label={BRAND.name}>
+        <BrandLogo className="h-8 w-auto object-contain" />
       </Link>
 
       {/* User avatar */}
       <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-        <span className="text-xs font-semibold text-background">
+        <span className="text-xs font-semibold text-on-primary">
           {initials}
         </span>
       </div>

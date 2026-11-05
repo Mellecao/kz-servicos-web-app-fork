@@ -5,6 +5,8 @@ import { fetchDriverProfiles, fetchVehiclesByDriver, deleteUserById } from "@/li
 import { useToast } from "@/components/Toast";
 import type { DriverProfile, Vehicle, ProviderStatus } from "@/types/database";
 import NovoMotoristaForm from "@/components/forms/NovoMotoristaForm";
+import { BRAND } from "@/lib/brand";
+import { formatDate, formatPhoneAO, phoneMatches } from "@/lib/format";
 
 const statusLabels: Record<ProviderStatus, string> = {
   approved: "Aprovado",
@@ -15,15 +17,11 @@ const statusLabels: Record<ProviderStatus, string> = {
 
 const statusColors: Record<ProviderStatus, string> = {
   approved: "#22c55e",
-  pending: "#FEBF22",
+  pending: BRAND.colors.primary,
   rejected: "#ef4444",
   suspended: "#5C5956",
 };
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
 
 function getInitials(name: string): string {
   return name
@@ -81,12 +79,12 @@ export default function MotoristasPage() {
     const userId = driver.provider_profiles?.users?.id;
     const name = driver.provider_profiles?.users?.full_name ?? "este motorista";
     if (!userId) {
-      toast("danger", "Não foi possível localizar o usuário do motorista.");
+      toast("danger", "Não foi possível localizar o utilizador do motorista.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Excluir ${name}? Essa ação apaga o motorista, veículo e perfil de acesso.`
+      `Eliminar ${name}? Essa ação apaga o motorista, veículo e perfil de acesso.`
     );
     if (!confirmed) return;
 
@@ -97,7 +95,7 @@ export default function MotoristasPage() {
       await loadDrivers();
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      toast("danger", message || "Erro ao excluir motorista.");
+      toast("danger", message || "Erro ao eliminar motorista.");
     } finally {
       setDeletingUserId(null);
     }
@@ -107,7 +105,7 @@ export default function MotoristasPage() {
     const name = d.provider_profiles?.users?.full_name ?? "";
     const phone = d.provider_profiles?.users?.phone ?? "";
     const q = search.toLowerCase();
-    const matchSearch = name.toLowerCase().includes(q) || phone.toLowerCase().includes(q);
+    const matchSearch = name.toLowerCase().includes(q) || phoneMatches(phone, search);
     const status = d.provider_profiles?.status ?? "";
     const matchStatus = statusFilter ? status === statusFilter : true;
     return matchSearch && matchStatus;
@@ -120,7 +118,7 @@ export default function MotoristasPage() {
         <div>
           <h1 className="text-xl md:text-3xl font-heading font-black text-dark">Motoristas</h1>
           <p className="text-contrast text-sm mt-1">
-            Gerencie os motoristas cadastrados na plataforma
+            Faça a gestão dos motoristas registados na plataforma
           </p>
         </div>
         <button
@@ -128,7 +126,7 @@ export default function MotoristasPage() {
             setEditingDriver(null);
             setShowForm(true);
           }}
-          className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
+          className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
         >
           + Novo Motorista
         </button>
@@ -138,13 +136,13 @@ export default function MotoristasPage() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <input
           type="text"
-          placeholder="Buscar motorista..."
+          placeholder="Procurar motorista..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full md:w-auto max-w-md px-4 py-2.5 rounded-lg border border-border bg-background text-dark placeholder:text-contrast/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
         />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-contrast">Status:</span>
+          <span className="text-xs text-contrast">Estado:</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -164,7 +162,7 @@ export default function MotoristasPage() {
           onClick={() => setViewMode("cards")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "cards"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -186,7 +184,7 @@ export default function MotoristasPage() {
           onClick={() => setViewMode("table")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "table"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -216,7 +214,7 @@ export default function MotoristasPage() {
         <div className="flex flex-col gap-2">
           {filtered.map((driver) => {
             const name = driver.provider_profiles?.users?.full_name ?? "Sem nome";
-            const phone = driver.provider_profiles?.users?.phone ?? "—";
+            const phone = formatPhoneAO(driver.provider_profiles?.users?.phone);
             const status = (driver.provider_profiles?.status ?? "pending") as ProviderStatus;
             const userId = driver.provider_profiles?.users?.id;
 
@@ -225,7 +223,7 @@ export default function MotoristasPage() {
                 key={driver.id}
                 className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary transition-colors"
               >
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary text-sm font-semibold flex-shrink-0">
                   {getInitials(name)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -270,8 +268,8 @@ export default function MotoristasPage() {
                   onClick={() => handleDeleteDriver(driver)}
                   disabled={!userId || deletingUserId === userId}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label={`Excluir ${name}`}
-                  title="Excluir motorista"
+                  aria-label={`Eliminar ${name}`}
+                  title="Eliminar motorista"
                 >
                   <svg
                     className="h-4 w-4"
@@ -305,10 +303,10 @@ export default function MotoristasPage() {
                     Telefone
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    Status
+                    Estado
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    CNH
+                    Carta de condução
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
                     Disponibilidade
@@ -324,7 +322,7 @@ export default function MotoristasPage() {
               <tbody className="divide-y divide-border">
                 {filtered.map((driver) => {
                   const name = driver.provider_profiles?.users?.full_name ?? "Sem nome";
-                  const phone = driver.provider_profiles?.users?.phone ?? "—";
+                  const phone = formatPhoneAO(driver.provider_profiles?.users?.phone);
                   const status = (driver.provider_profiles?.status ?? "pending") as ProviderStatus;
                   const rating = driver.provider_profiles?.average_rating ?? 0;
                   const userId = driver.provider_profiles?.users?.id;
@@ -359,7 +357,7 @@ export default function MotoristasPage() {
                       <td className="px-5 py-3.5 text-sm text-contrast">
                         {driver.cnh_category ? `Cat. ${driver.cnh_category}` : "—"}
                         {driver.cnh_expiration_date
-                          ? ` • Venc. ${formatDate(driver.cnh_expiration_date)}`
+                          ? ` • Val. ${formatDate(driver.cnh_expiration_date)}`
                           : ""}
                       </td>
                       <td className="px-5 py-3.5">
@@ -422,7 +420,7 @@ export default function MotoristasPage() {
                               d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
                             />
                           </svg>
-                          {deletingUserId === userId ? "Excluindo..." : "Excluir"}
+                          {deletingUserId === userId ? "A eliminar..." : "Eliminar"}
                         </button>
                       </td>
                     </tr>

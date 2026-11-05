@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchProviderProfiles } from "@/lib/api";
 import type { ProviderProfile, ProviderStatus } from "@/types/database";
 import NovoPrestadorForm from "@/components/forms/NovoPrestadorForm";
+import { BRAND } from "@/lib/brand";
+import { formatPhoneAO, phoneMatches } from "@/lib/format";
 
 const statusLabels: Record<ProviderStatus, string> = {
   approved: "Aprovado",
@@ -14,7 +16,7 @@ const statusLabels: Record<ProviderStatus, string> = {
 
 const statusColors: Record<ProviderStatus, string> = {
   approved: "#22c55e",
-  pending: "#FEBF22",
+  pending: BRAND.colors.primary,
   rejected: "#ef4444",
   suspended: "#5C5956",
 };
@@ -55,7 +57,7 @@ export default function PrestadoresPage() {
     const name = p.users?.full_name ?? "";
     const phone = p.users?.phone ?? "";
     const q = search.toLowerCase();
-    const matchSearch = name.toLowerCase().includes(q) || phone.toLowerCase().includes(q);
+    const matchSearch = name.toLowerCase().includes(q) || phoneMatches(phone, search);
     const matchStatus = statusFilter ? p.status === statusFilter : true;
     return matchSearch && matchStatus;
   });
@@ -69,12 +71,12 @@ export default function PrestadoresPage() {
             Prestadores
           </h1>
           <p className="text-contrast text-sm mt-1">
-            Gerencie os prestadores de serviço da plataforma
+            Faça a gestão dos prestadores de serviço da plataforma
           </p>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
+          className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
         >
           + Novo Prestador
         </button>
@@ -84,13 +86,13 @@ export default function PrestadoresPage() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <input
           type="text"
-          placeholder="Buscar prestador..."
+          placeholder="Procurar prestador..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full md:w-auto max-w-md px-4 py-2.5 rounded-lg border border-border bg-background text-dark placeholder:text-contrast/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
         />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-contrast">Status:</span>
+          <span className="text-xs text-contrast">Estado:</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -110,7 +112,7 @@ export default function PrestadoresPage() {
           onClick={() => setViewMode("cards")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "cards"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -132,7 +134,7 @@ export default function PrestadoresPage() {
           onClick={() => setViewMode("table")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "table"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -161,14 +163,14 @@ export default function PrestadoresPage() {
         <div className="flex flex-col gap-2">
           {filtered.map((provider) => {
             const name = provider.users?.full_name ?? "Sem nome";
-            const phone = provider.users?.phone ?? "—";
+            const phone = formatPhoneAO(provider.users?.phone);
 
             return (
               <div
                 key={provider.id}
                 className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 cursor-pointer hover:border-primary transition-colors"
               >
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary text-sm font-semibold flex-shrink-0">
                   {getInitials(name)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -220,14 +222,14 @@ export default function PrestadoresPage() {
                     Avaliação
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    Status
+                    Estado
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((provider) => {
                   const name = provider.users?.full_name ?? "Sem nome";
-                  const phone = provider.users?.phone ?? "—";
+                  const phone = formatPhoneAO(provider.users?.phone);
                   const category = provider.service_categories?.name ?? "—";
 
                   return (

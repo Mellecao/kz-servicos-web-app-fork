@@ -2,18 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { fetchAdminLogs } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import type { AdminLog } from "@/types/database";
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 function actionColor(action: string): { bg: string; text: string } {
   if (action.includes("cancelada") || action.includes("removida") || action.includes("removido")) {
@@ -87,7 +77,7 @@ export default function LogsPage() {
 
       {/* Content */}
       {loading ? (
-        <div className="text-center py-16 text-contrast text-sm">Carregando logs...</div>
+        <div className="text-center py-16 text-contrast text-sm">A carregar logs...</div>
       ) : logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-border">
@@ -97,7 +87,7 @@ export default function LogsPage() {
             <line x1="16" y1="17" x2="8" y2="17" />
             <polyline points="10 9 9 9 8 9" />
           </svg>
-          <p className="text-contrast text-sm">Nenhuma ação registrada nas últimas 24 horas</p>
+          <p className="text-contrast text-sm">Nenhuma ação registada nas últimas 24 horas</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -121,7 +111,7 @@ export default function LogsPage() {
 
                   {/* Timestamp */}
                   <span className="flex-shrink-0 text-xs text-contrast whitespace-nowrap">
-                    {formatDate(log.created_at)}
+                    {formatDateTime(log.created_at, { seconds: true })}
                   </span>
                 </div>
 

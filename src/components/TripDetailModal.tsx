@@ -27,6 +27,9 @@ import {
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
 import { supabase } from "@/lib/supabase";
+import { BRAND } from "@/lib/brand";
+import { formatDateTime, formatKz } from "@/lib/format";
+import { formatPaymentMethod } from "@/lib/payment";
 
 interface TripDetailModalProps {
   trip: Trip | null;
@@ -39,17 +42,17 @@ const statusLabels: Record<string, string> = {
   open: "Aberta",
   under_review: "Em Análise",
   review_rejected: "Rejeitada na Análise",
-  searching_drivers: "Buscando Motorista",
-  awaiting_client_confirmation: "Aguardando Confirmação do Cliente",
-  awaiting_driver_confirmation: "Aguardando Validação do Motorista",
+  searching_drivers: "A Procurar Motorista",
+  awaiting_client_confirmation: "A Aguardar Confirmação do Cliente",
+  awaiting_driver_confirmation: "A Aguardar Validação do Motorista",
   scheduled: "Agendada",
-  started: "Em Andamento",
+  started: "Em curso",
   finished: "Finalizada",
   cancelled: "Cancelada",
 };
 
 const statusColors: Record<string, { bg: string; text: string }> = {
-  open: { bg: "#FEBF2220", text: "#FEBF22" },
+  open: { bg: `${BRAND.colors.primary}20`, text: BRAND.colors.primary },
   under_review: { bg: "#94A3B820", text: "#94A3B8" },
   review_rejected: { bg: "#ef444420", text: "#ef4444" },
   searching_drivers: { bg: "#2261FE20", text: "#2261FE" },
@@ -61,14 +64,6 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   cancelled: { bg: "#ef444420", text: "#ef4444" },
 };
 
-const paymentLabels: Record<string, string> = {
-  pix: "PIX",
-  debit: "Débito",
-  credit: "Crédito",
-  cash: "Dinheiro",
-  billing: "Faturamento",
-};
-
 const candidateStatusLabels: Record<TripDriverCandidateStatus, string> = {
   pending: "pendente",
   accepted: "aceito",
@@ -76,25 +71,12 @@ const candidateStatusLabels: Record<TripDriverCandidateStatus, string> = {
 };
 
 const candidateStatusColors: Record<TripDriverCandidateStatus, { bg: string; text: string }> = {
-  pending: { bg: "#FEBF2220", text: "#FEBF22" },
+  pending: { bg: `${BRAND.colors.primary}20`, text: BRAND.colors.primary },
   accepted: { bg: "#22c55e20", text: "#22c55e" },
   rejected: { bg: "#ef444420", text: "#ef4444" },
 };
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
-function formatCurrency(value: number | null | undefined) {
-  if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-}
 
 function shortenAddress(addr: string | undefined | null) {
   if (!addr) return "—";
@@ -253,7 +235,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const route = `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`;
   const passengerName = t.users?.full_name ?? "—";
 
-  const statusColor = statusColors[t.status] ?? { bg: "#FEBF2220", text: "#FEBF22" };
+  const statusColor = statusColors[t.status] ?? { bg: `${BRAND.colors.primary}20`, text: BRAND.colors.primary };
 
   // Drivers not yet added as candidates
   const candidateDriverIds = new Set(candidates.map((c) => c.driver_profile_id));
@@ -269,7 +251,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setActioning(true);
     try {
       await approveTrip(t.id);
-      toast("success", "Viagem aprovada — agora em Buscando Motorista");
+      toast("success", "Viagem aprovada — agora a procurar motorista");
       onUpdate();
       await loadTripData(t.id);
     } catch {
@@ -365,7 +347,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       onUpdate();
     } catch {
       setLiveTrip((prev) => prev ? { ...prev, is_paid: !next } : prev);
-      toast("danger", "Erro ao atualizar pagamento da corrida");
+      toast("danger", "Erro ao atualizar pagamento da viagem");
     }
   }
 
@@ -382,9 +364,6 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     }
   }
 
-  const paymentMethodLabel = (m: string) =>
-    ({ pix: "PIX", debit: "Débito", credit: "Crédito", cash: "Dinheiro", billing: "Faturamento" }[m] ?? m);
-
   const handleSelectDriver = async (candidate: TripDriverCandidate) => {
     if (candidate.offered_price == null) return;
     try {
@@ -400,7 +379,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setCandidates(updatedCandidates);
       setLiveTrip(updatedTrip);
-      toast("success", `Aguardando validação do motorista — R$ ${candidate.offered_price.toFixed(2)}`);
+      toast("success", `A aguardar validação do motorista — ${formatKz(candidate.offered_price)}`);
     } catch {
       toast("danger", "Erro ao selecionar motorista");
     }
@@ -498,7 +477,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
         {/* Body — 2 columns */}
         {loadingData ? (
           <div className="flex-1 flex items-center justify-center text-contrast text-sm py-12">
-            Carregando...
+            A carregar...
           </div>
         ) : (
           <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
@@ -522,11 +501,11 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               <InfoRow label="Categoria" value={t.service_categories?.name ?? "—"} />
               <InfoRow label="Embarque" value={t.pickup_address?.formatted_address ?? "—"} />
               <InfoRow label="Desembarque" value={t.dropoff_address?.formatted_address ?? "—"} />
-              <InfoRow label="Data e hora" value={formatDate(t.scheduled_datetime)} />
+              <InfoRow label="Data e hora" value={formatDateTime(t.scheduled_datetime)} />
               {t.is_round_trip && (
                 <InfoRow
                   label="Retorno"
-                  value={t.return_datetime ? formatDate(t.return_datetime) : "—"}
+                  value={t.return_datetime ? formatDateTime(t.return_datetime) : "—"}
                 />
               )}
               <InfoRow label="Passageiros" value={String(t.passenger_count)} />
@@ -543,7 +522,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               {t.status === "awaiting_driver_confirmation" && (
                 <>
                   <SectionTitle>Validação do Motorista</SectionTitle>
-                  <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
+                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30">
                     <p className="text-xs text-dark font-body leading-relaxed">
                       O cliente aceitou o motorista. A viagem só será agendada
                       depois que o motorista confirmar novamente.
@@ -551,10 +530,10 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                     <button
                       onClick={handleResendDriverConfirmation}
                       disabled={resendingDriverConfirmation}
-                      className="mt-3 w-full py-2 rounded-lg bg-primary text-background text-sm font-heading font-bold hover:bg-primary-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                      className="mt-3 w-full py-2 rounded-lg bg-primary text-on-primary text-sm font-heading font-bold hover:bg-primary-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
                     >
                       {resendingDriverConfirmation
-                        ? "Reenviando..."
+                        ? "A reenviar..."
                         : "Reenviar pedido ao motorista"}
                     </button>
                   </div>
@@ -628,7 +607,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       setSelectedDriverId(val);
                       handleAddCandidate(val);
                     }}
-                    placeholder="Buscar e adicionar motorista..."
+                    placeholder="Procurar e adicionar motorista..."
                     disabled={addingDriver}
                   />
                 </div>
@@ -663,10 +642,10 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                             </span>
                             {c.offered_price != null ? (
                               <span className="text-sm font-bold text-green-500">
-                                R$ {c.offered_price.toFixed(2)}
+                                {formatKz(c.offered_price)}
                               </span>
                             ) : (
-                              <span className="text-xs text-contrast/50 italic">Aguardando valor</span>
+                              <span className="text-xs text-contrast/50 italic">A aguardar valor</span>
                             )}
                           </div>
                           {t.status === "searching_drivers" && candStatus === "accepted" && (
@@ -759,7 +738,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               {/* Status History */}
               <SectionTitle>Histórico de Status</SectionTitle>
               {history.length === 0 ? (
-                <p className="text-xs text-contrast italic">Sem histórico registrado.</p>
+                <p className="text-xs text-contrast italic">Sem histórico registado.</p>
               ) : (
                 <div className="flex flex-col gap-1">
                   {history.map((h) => (
@@ -779,7 +758,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                         <p className="text-xs text-contrast mt-0.5 italic">{h.observations}</p>
                       )}
                       <p className="text-[10px] text-contrast/60 mt-0.5">
-                        {formatDate(h.created_at)}
+                        {formatDateTime(h.created_at)}
                       </p>
                     </div>
                   ))}
@@ -802,7 +781,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  {t.is_paid ? "Corrida paga" : "Marcar corrida como paga"}
+                  {t.is_paid ? "Viagem paga" : "Marcar viagem como paga"}
                 </button>
 
                 <button
@@ -828,7 +807,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                     <span className="text-xs text-contrast">Preço estimado:</span>
-                    <span className="text-xs text-dark font-medium ml-auto">{formatCurrency(t.estimated_price)}</span>
+                    <span className="text-xs text-dark font-medium ml-auto">{formatKz(t.estimated_price)}</span>
                   </div>
                 )}
                 {t.final_price != null && (
@@ -837,7 +816,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                     <span className="text-xs text-contrast">Valor final:</span>
-                    <span className="text-xs text-dark font-medium ml-auto">{formatCurrency(t.final_price)}</span>
+                    <span className="text-xs text-dark font-medium ml-auto">{formatKz(t.final_price)}</span>
                   </div>
                 )}
                 {t.payment_method != null && (
@@ -846,7 +825,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
                     </svg>
                     <span className="text-xs text-contrast">Pagamento:</span>
-                    <span className="text-xs text-dark font-medium ml-auto">{paymentMethodLabel(t.payment_method)}</span>
+                    <span className="text-xs text-dark font-medium ml-auto">{formatPaymentMethod(t.payment_method)}</span>
                   </div>
                 )}
               </div>
@@ -863,12 +842,12 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                         onClick={() => setShowDeleteConfirm(true)}
                         className="w-full py-2 rounded-lg border border-danger/50 text-danger text-sm font-heading font-bold hover:bg-danger/10 transition-colors duration-150 cursor-pointer"
                       >
-                        Excluir Viagem
+                        Eliminar Viagem
                       </button>
                     ) : (
                       <div className="flex flex-col gap-2">
                         <p className="text-xs text-contrast">
-                          Digite <strong className="text-dark">confirmar</strong> para cancelar a viagem:
+                          Escreva <strong className="text-dark">confirmar</strong> para cancelar a viagem:
                         </p>
                         <input
                           type="text"

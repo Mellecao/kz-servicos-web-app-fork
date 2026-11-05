@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  ANGOLA_REGION_CODE,
+  LUANDA_BIAS_RADIUS_M,
+  LUANDA_CENTER,
+  PLACES_LANGUAGE_CODE,
+} from "@/lib/geo";
 
 type GoogleAutocompleteSuggestion = {
   placePrediction?: {
@@ -47,14 +53,18 @@ export async function POST(request: NextRequest) {
     },
     body: JSON.stringify({
       input,
-      includedRegionCodes: ["br"],
-      languageCode: "pt-BR",
+      includedRegionCodes: [ANGOLA_REGION_CODE],
+      regionCode: ANGOLA_REGION_CODE,
+      languageCode: PLACES_LANGUAGE_CODE,
+      locationBias: {
+        circle: { center: LUANDA_CENTER, radius: LUANDA_BIAS_RADIUS_M },
+      },
     }),
   });
 
   if (!response.ok) {
     return NextResponse.json(
-      { error: "Erro ao buscar endereços no Google Places" },
+      { error: "Erro ao procurar moradas no Google Places" },
       { status: response.status }
     );
   }

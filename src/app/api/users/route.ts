@@ -27,21 +27,21 @@ export async function POST(request: NextRequest) {
 
     if (password !== undefined && typeof password !== "string") {
       return NextResponse.json(
-        { error: "A senha deve ser um texto" },
+        { error: "A palavra-passe deve ser um texto" },
         { status: 400 }
       );
     }
 
     if (password && password.length < 6) {
       return NextResponse.json(
-        { error: "A senha deve ter pelo menos 6 caracteres" },
+        { error: "A palavra-passe deve ter pelo menos 6 caracteres" },
         { status: 400 }
       );
     }
 
     if (role === "client" && !password) {
       return NextResponse.json(
-        { error: "Clientes exigem senha" },
+        { error: "Clientes exigem palavra-passe" },
         { status: 400 }
       );
     }

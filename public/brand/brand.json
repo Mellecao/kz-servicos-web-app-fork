@@ -1,0 +1,41 @@
+{
+  "name": "Só Serviços",
+  "tagline": "Serviços de apoio ao domicílio",
+  "colors": {
+    "primary": "#FF9A52",
+    "primaryDark": "#E68B4A",
+    "primaryLight": "#FFB27A",
+    "pink": "#E54C65",
+    "onPrimary": "#1F2430",
+    "appIconBackground": "#16161D",
+    "darkText": "#1F2430",
+    "oldYellowToReplace": [
+      "#FEBF22",
+      "#e5ab1e",
+      "#FFD700",
+      "#FFA000"
+    ]
+  },
+  "gradient": {
+    "css": "linear-gradient(90deg, #E54C65 0%, #FF9A52 100%)",
+    "stops": [
+      "#E54C65",
+      "#FF9A52"
+    ]
+  },
+  "files": [
+    "app-icon-1024.png",
+    "app-icon-foreground-1024.png",
+    "app-icon-monochrome-1024.png",
+    "brand.json",
+    "favicon-180.png",
+    "favicon-192.png",
+    "favicon-32.png",
+    "favicon-512.png",
+    "favicon.ico",
+    "logo-horizontal-dark.png",
+    "logo-horizontal-white.png",
+    "logo-icon.png",
+    "splash-1242x2688.png"
+  ]
+}

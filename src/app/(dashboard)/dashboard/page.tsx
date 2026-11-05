@@ -4,6 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { fetchDashboardStats } from "@/lib/api";
 import type { TripStatus, ServiceRequestStatus } from "@/types/database";
+import { SERVICE_STATUS_LABELS } from "@/lib/service-requests";
+import { BRAND } from "@/lib/brand";
+import { formatDateLong, formatDayMonth, formatKz } from "@/lib/format";
+import { formatPaymentMethod } from "@/lib/payment";
 
 // ─── Types ─────────────────────────────────────────────────
 interface MonthlyBar {
@@ -69,28 +73,17 @@ const tripStatusLabels: Record<TripStatus, string> = {
   open: "Aberta",
   under_review: "Em análise",
   review_rejected: "Rejeitada",
-  searching_drivers: "Buscando motorista",
+  searching_drivers: "A procurar motorista",
   awaiting_client_confirmation: "Aguard. cliente",
   awaiting_driver_confirmation: "Aguard. motorista",
   scheduled: "Agendada",
-  started: "Em andamento",
+  started: "Em curso",
   finished: "Finalizada",
   cancelled: "Cancelada",
 };
 
-const serviceStatusLabels: Record<ServiceRequestStatus, string> = {
-  open: "Aberto",
-  under_review: "Em análise",
-  review_rejected: "Rejeitado",
-  searching_provider: "Buscando prestador",
-  assigned: "Atribuído",
-  in_progress: "Em andamento",
-  finished: "Finalizado",
-  cancelled: "Cancelado",
-};
-
 const statusColors: Record<string, string> = {
-  open: "#FEBF22",
+  open: BRAND.colors.primary,
   under_review: "#94A3B8",
   review_rejected: "#ef4444",
   searching_drivers: "#2261FE",
@@ -108,29 +101,13 @@ const statusColors: Record<string, string> = {
 const PAYMENT_COLORS: Record<string, string> = {
   pix: "#22C55E",
   debit: "#2261FE",
-  credit: "#FEBF22",
+  credit: BRAND.colors.primary,
   cash: "#f97316",
   billing: "#A855F7",
   outro: "#94A3B8",
 };
 
-const PAYMENT_LABELS: Record<string, string> = {
-  pix: "Pix",
-  debit: "Débito",
-  credit: "Crédito",
-  cash: "Dinheiro",
-  billing: "Boleto",
-  outro: "Outro",
-};
-
 // ─── Helpers ───────────────────────────────────────────────
-function formatCurrency(value: number): string {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  });
-}
 
 // ─── Count-up hook ─────────────────────────────────────────
 function useCountUp(target: number, duration = 900, decimals = 0): number {
@@ -209,11 +186,11 @@ function BarChart({ data, loaded }: { data: MonthlyBar[]; loaded: boolean }) {
                       minHeight: bar.trips > 0 ? 1 : 0,
                     }}
                   />
-                  {/* Services (amber) — bottom segment */}
+                  {/* Services (primary) — bottom segment */}
                   <div
                     style={{
                       flex: bar.services,
-                      backgroundColor: "#FEBF22",
+                      backgroundColor: BRAND.colors.primary,
                       minHeight: bar.services > 0 ? 1 : 0,
                     }}
                   />
@@ -313,7 +290,7 @@ function DonutChart({
               style={{ backgroundColor: PAYMENT_COLORS[method] ?? PAYMENT_COLORS.outro }}
             />
             <span className="text-xs text-contrast truncate">
-              {PAYMENT_LABELS[method] ?? method}
+              {method === "outro" ? "Outro" : formatPaymentMethod(method)}
             </span>
             <span className="text-xs font-heading font-black text-dark ml-auto">
               {Math.round((count / total) * 100)}%
@@ -399,16 +376,16 @@ export default function DashboardPage() {
   const alerts = data
     ? [
         {
-          label: "Aguardando confirmação do cliente",
+          label: "A aguardar confirmação do cliente",
           count: data.alertAwaitingClient,
           href: "/viagens",
           color: "#f97316",
         },
         {
-          label: "Aguardando validação do motorista",
+          label: "A aguardar validação do motorista",
           count: data.alertAwaitingDriver,
           href: "/viagens",
-          color: "#FEBF22",
+          color: BRAND.colors.primary,
         },
         {
           label: "Itens sob análise",
@@ -433,16 +410,16 @@ export default function DashboardPage() {
 
   // Funnel data
   const tripFunnel = [
-    { label: "Abertas", statuses: ["open"], color: "#FEBF22" },
+    { label: "Abertas", statuses: ["open"], color: BRAND.colors.primary },
     { label: "Em análise", statuses: ["under_review"], color: "#94A3B8" },
-    { label: "Buscando motorista", statuses: ["searching_drivers"], color: "#2261FE" },
+    { label: "A procurar motorista", statuses: ["searching_drivers"], color: "#2261FE" },
     {
       label: "Cliente/validação",
       statuses: ["awaiting_client_confirmation", "awaiting_driver_confirmation"],
       color: "#f97316",
     },
     { label: "Agendadas", statuses: ["scheduled"], color: "#2261FE" },
-    { label: "Em andamento", statuses: ["started"], color: "#22C55E" },
+    { label: "Em curso", statuses: ["started"], color: "#22C55E" },
     { label: "Finalizadas", statuses: ["finished"], color: "#22C55E" },
     { label: "Canceladas", statuses: ["cancelled"], color: "#ef4444" },
   ].map((item) => ({
@@ -454,11 +431,11 @@ export default function DashboardPage() {
   }));
 
   const serviceFunnel = [
-    { label: "Abertos", statuses: ["open"], color: "#FEBF22" },
+    { label: "Abertos", statuses: ["open"], color: BRAND.colors.primary },
     { label: "Em análise", statuses: ["under_review"], color: "#94A3B8" },
-    { label: "Buscando prestador", statuses: ["searching_provider"], color: "#2261FE" },
+    { label: "A procurar prestador", statuses: ["searching_provider"], color: "#2261FE" },
     { label: "Atribuídos", statuses: ["assigned"], color: "#2261FE" },
-    { label: "Em andamento", statuses: ["in_progress"], color: "#22C55E" },
+    { label: "Em curso", statuses: ["in_progress"], color: "#22C55E" },
     { label: "Finalizados", statuses: ["finished"], color: "#22C55E" },
     { label: "Cancelados", statuses: ["cancelled"], color: "#ef4444" },
   ].map((item) => ({
@@ -493,7 +470,7 @@ export default function DashboardPage() {
       id: s.id,
       tipo: "servico" as const,
       status: s.status,
-      statusLabel: serviceStatusLabels[s.status],
+      statusLabel: SERVICE_STATUS_LABELS[s.status],
       date: s.service_date,
       value: s.final_price ?? s.estimated_price ?? null,
       isPaid: s.is_paid ?? false,
@@ -512,9 +489,9 @@ export default function DashboardPage() {
   const kpiCards = [
     {
       label: "Receita do Mês",
-      value: formatCurrency(revenue),
+      value: formatKz(revenue),
       change: data?.revenueChange,
-      accent: "#FEBF22",
+      accent: BRAND.colors.primary,
       highlight: true,
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -524,7 +501,7 @@ export default function DashboardPage() {
     },
     {
       label: "Receita Pendente",
-      value: formatCurrency(pending),
+      value: formatKz(pending),
       accent: "#f97316",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -534,7 +511,7 @@ export default function DashboardPage() {
     },
     {
       label: "Ticket Médio",
-      value: formatCurrency(ticket),
+      value: formatKz(ticket),
       accent: "#A855F7",
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -565,7 +542,7 @@ export default function DashboardPage() {
     {
       label: "Avaliação Média",
       value: (data?.avgRating ?? 0) > 0 ? `${avgRating.toFixed(1)} ★` : "—",
-      accent: "#FEBF22",
+      accent: BRAND.colors.primary,
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -595,12 +572,7 @@ export default function DashboardPage() {
             Dashboard
           </h1>
           <p className="text-contrast text-sm mt-0.5">
-            {new Date().toLocaleDateString("pt-BR", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
+            {formatDateLong(new Date())}
           </p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-contrast pb-0.5">
@@ -929,8 +901,8 @@ export default function DashboardPage() {
                     className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                     style={{
                       backgroundColor:
-                        item.tipo === "viagem" ? "#2261FE18" : "#FEBF2218",
-                      color: item.tipo === "viagem" ? "#2261FE" : "#FEBF22",
+                        item.tipo === "viagem" ? "#2261FE18" : `${BRAND.colors.primary}18`,
+                      color: item.tipo === "viagem" ? "#2261FE" : BRAND.colors.primary,
                     }}
                   >
                     {item.tipo === "viagem" ? (
@@ -952,10 +924,7 @@ export default function DashboardPage() {
                         {item.client}
                       </span>
                       <span className="text-xs text-contrast/50 shrink-0 hidden sm:inline tabular-nums">
-                        {new Date(item.date).toLocaleDateString("pt-BR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                        })}
+                        {formatDayMonth(item.date)}
                       </span>
                     </div>
                     <p className="text-xs text-contrast mt-0.5 truncate">
@@ -983,7 +952,7 @@ export default function DashboardPage() {
                           color: item.isPaid ? "#22C55E" : "var(--color-dark)",
                         }}
                       >
-                        {formatCurrency(item.value)}
+                        {formatKz(item.value)}
                       </p>
                       {item.isPaid && (
                         <p className="text-[10px] text-contrast/50 leading-none mt-0.5">

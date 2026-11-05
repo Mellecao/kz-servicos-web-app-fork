@@ -247,7 +247,7 @@ export default function SearchableSelect({
         >
           {loading && (
             <li className="px-3 py-2 text-sm text-contrast">
-              Carregando...
+              A carregar...
             </li>
           )}
 

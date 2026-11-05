@@ -17,20 +17,13 @@ import {
 } from "@/lib/google-places";
 import type { User, ServiceCategory, PaymentMethod } from "@/types/database";
 import type { SearchableSelectOption } from "@/components/SearchableSelect";
+import { PAYMENT_OPTIONS } from "@/lib/payment";
 
 interface NovaViagemFormProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
-
-const paymentOptions: SearchableSelectOption[] = [
-  { value: "pix", label: "PIX" },
-  { value: "debit", label: "Débito" },
-  { value: "credit", label: "Crédito" },
-  { value: "cash", label: "Dinheiro" },
-  { value: "billing", label: "Faturamento" },
-];
 
 const inputClass =
   "w-full rounded-lg bg-background border border-border text-dark placeholder:text-contrast/40 focus:ring-primary focus:ring-1 focus:outline-none px-3 py-2 text-base md:text-sm font-body";
@@ -136,7 +129,7 @@ export default function NovaViagemForm({
       return;
     }
     if (isRoundTrip && !returnDatetime) {
-      toast("warning", "Informe a data/hora de retorno");
+      toast("warning", "Indique a data/hora de retorno");
       return;
     }
 
@@ -191,9 +184,9 @@ export default function NovaViagemForm({
               type="submit"
               form="nova-viagem-form"
               disabled={submitting}
-              className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2 rounded-lg bg-primary text-on-primary font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? "Criando..." : "Criar Viagem"}
+              {submitting ? "A criar..." : "Criar Viagem"}
             </button>
           </div>
         }
@@ -219,9 +212,9 @@ export default function NovaViagemForm({
             />
           </div>
 
-          {/* Endereço de embarque */}
+          {/* Morada de embarque */}
           <div>
-            <label className={labelClass}>Endereço de embarque</label>
+            <label className={labelClass}>Morada de embarque</label>
             <SearchableSelect
               options={pickupPlaces.options}
               value={pickupAddress}
@@ -245,15 +238,15 @@ export default function NovaViagemForm({
                 setPickupPlaceAddress(null);
                 pickupPlaces.search(q);
               }}
-              placeholder="Ex: Rua das Flores, 123 - Centro"
+              placeholder="Ex: Rua Rainha Ginga, Ingombota, Luanda"
               error={isFieldInvalid(pickupAddress)}
               loading={pickupPlaces.loading}
             />
           </div>
 
-          {/* Endereço de desembarque */}
+          {/* Morada de desembarque */}
           <div>
-            <label className={labelClass}>Endereço de desembarque</label>
+            <label className={labelClass}>Morada de desembarque</label>
             <SearchableSelect
               options={dropoffPlaces.options}
               value={dropoffAddress}
@@ -378,7 +371,7 @@ export default function NovaViagemForm({
           <div>
             <label className={labelClass}>Forma de pagamento</label>
             <SearchableSelect
-              options={paymentOptions}
+              options={PAYMENT_OPTIONS}
               value={paymentMethod}
               onChange={(val) => setPaymentMethod(val as PaymentMethod)}
               placeholder="Selecione"

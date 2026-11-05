@@ -39,12 +39,16 @@ html.light {
 }
 
 @theme inline {
-  --color-primary: #FEBF22;
-  --color-primary-dark: #e5ab1e;
+  /* Marca "Só Serviços" — manter em sincronia com src/lib/brand.ts */
+  --color-primary: #FF9A52;
+  --color-primary-dark: #E68B4A;
+  --color-primary-light: #FFB27A;
+  --color-brand-pink: #E54C65;
+  --color-on-primary: #1F2430;
   --color-accent: #22C55E;
   --color-accent-dark: #16A34A;
   --color-success: #22c55e;
-  --color-warning: #f59e0b;
+  --color-warning: #FF9A52;
   --color-danger: #ef4444;
   --color-white: #FFFFFF;
   --font-heading: 'Outfit Black', sans-serif;
@@ -160,7 +164,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Kanban DnD animations */
 @keyframes card-highlight {
   0%, 100% { box-shadow: 0 0 0 2px transparent; }
-  50% { box-shadow: 0 0 0 2px #FEBF22; }
+  50% { box-shadow: 0 0 0 2px var(--color-primary); }
 }
 
 @keyframes card-settle {
@@ -182,3 +186,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .slide-up   { animation: slide-up   0.3s ease forwards; }
 .slide-down { animation: slide-down 0.3s ease forwards; }
+
+/* Logo da marca: variante clara/escura conforme o tema (html.light), sem JS */
+html.light .brand-logo-on-dark { display: none; }
+html:not(.light) .brand-logo-on-light { display: none; }

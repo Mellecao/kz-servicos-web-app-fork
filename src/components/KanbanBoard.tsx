@@ -12,6 +12,7 @@ import {
   type DragOverEvent,
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { BRAND } from "@/lib/brand";
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -83,8 +84,8 @@ function DraggableCard({
           <span
             className="text-xs px-2 py-0.5 rounded-full font-medium"
             style={{
-              backgroundColor: `${card.tagColor || "#FEBF22"}20`,
-              color: card.tagColor || "#FEBF22",
+              backgroundColor: `${card.tagColor || BRAND.colors.primary}20`,
+              color: card.tagColor || BRAND.colors.primary,
             }}
           >
             {card.tag}
@@ -111,8 +112,8 @@ function CardOverlay({ card }: { card: KanbanCard }) {
           <span
             className="text-xs px-2 py-0.5 rounded-full font-medium"
             style={{
-              backgroundColor: `${card.tagColor || "#FEBF22"}20`,
-              color: card.tagColor || "#FEBF22",
+              backgroundColor: `${card.tagColor || BRAND.colors.primary}20`,
+              color: card.tagColor || BRAND.colors.primary,
             }}
           >
             {card.tag}

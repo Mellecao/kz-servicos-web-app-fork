@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Documentação do Banco de Dados — KZ Serviços',
-  description: 'Documentação completa do schema do banco de dados Supabase do KZ Serviços.',
+  title: 'Documentação do Banco de Dados — Só Serviços',
+  description: 'Documentação completa do schema do banco de dados Supabase do Só Serviços.',
 }
 
 type Column = {
@@ -55,7 +55,7 @@ const tables: TableDoc[] = [
   {
     id: 'users',
     name: 'users',
-    description: 'Tabela principal de usuários, vinculada ao auth.users do Supabase Auth.',
+    description: 'Tabela principal de utilizadores, associada ao auth.users do Supabase Auth.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK — referencia auth.users.id' },
       { name: 'role', type: 'user_role', constraints: 'NOT NULL, DEFAULT \'client\'' },
@@ -118,7 +118,7 @@ const tables: TableDoc[] = [
   {
     id: 'driver_profiles',
     name: 'driver_profiles',
-    description: 'Perfil específico de motoristas, vinculado a um provider_profile.',
+    description: 'Perfil específico de motoristas, associado a um provider_profile.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'provider_profile_id', type: 'UUID', constraints: 'FK → provider_profiles, UNIQUE, NOT NULL' },
@@ -133,7 +133,7 @@ const tables: TableDoc[] = [
   {
     id: 'vehicles',
     name: 'vehicles',
-    description: 'Veículos cadastrados por motoristas.',
+    description: 'Veículos registados por motoristas.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'driver_profile_id', type: 'UUID', constraints: 'FK → driver_profiles, NOT NULL' },
@@ -164,7 +164,7 @@ const tables: TableDoc[] = [
   {
     id: 'addresses',
     name: 'addresses',
-    description: 'Endereços utilizados em viagens e solicitações. O campo location é auto-populado via trigger.',
+    description: 'Moradas utilizadas em viagens e solicitações. O campo location é auto-populado via trigger.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'google_place_id', type: 'VARCHAR(255)', constraints: '' },
@@ -298,7 +298,7 @@ const tables: TableDoc[] = [
   {
     id: 'chat_rooms',
     name: 'chat_rooms',
-    description: 'Salas de chat entre cliente e prestador, vinculadas a uma viagem ou solicitação de serviço.',
+    description: 'Salas de chat entre cliente e prestador, associadas a uma viagem ou solicitação de serviço.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'trip_id', type: 'UUID', constraints: 'FK → trips' },
@@ -313,7 +313,7 @@ const tables: TableDoc[] = [
   {
     id: 'chat_messages',
     name: 'chat_messages',
-    description: 'Mensagens enviadas nas salas de chat. Habilitada para Realtime.',
+    description: 'Mensagens enviadas nas salas de chat. Ativada para Realtime.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'chat_room_id', type: 'UUID', constraints: 'FK → chat_rooms, ON DELETE CASCADE, NOT NULL' },
@@ -329,7 +329,7 @@ const tables: TableDoc[] = [
   {
     id: 'notifications',
     name: 'notifications',
-    description: 'Notificações do sistema para os usuários. Habilitada para Realtime.',
+    description: 'Notificações do sistema para os utilizadores. Ativada para Realtime.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'user_id', type: 'UUID', constraints: 'FK → users, NOT NULL' },
@@ -349,7 +349,7 @@ const tables: TableDoc[] = [
   {
     id: 'user_devices',
     name: 'user_devices',
-    description: 'Dispositivos registrados dos usuários para push notifications.',
+    description: 'Dispositivos registados dos utilizadores para push notifications.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'user_id', type: 'UUID', constraints: 'FK → users, NOT NULL' },
@@ -364,7 +364,7 @@ const tables: TableDoc[] = [
   {
     id: 'driver_locations',
     name: 'driver_locations',
-    description: 'Localização em tempo real dos motoristas. Habilitada para Realtime. O campo location é auto-populado via trigger.',
+    description: 'Localização em tempo real dos motoristas. Ativada para Realtime. O campo location é auto-populado via trigger.',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'driver_profile_id', type: 'UUID', constraints: 'FK → driver_profiles, UNIQUE, NOT NULL' },
@@ -444,7 +444,7 @@ const triggers = [
   {
     name: 'set_address_location',
     table: 'addresses',
-    description: 'Preenche automaticamente o campo location (GEOGRAPHY) a partir de latitude e longitude ao inserir ou atualizar um endereço.',
+    description: 'Preenche automaticamente o campo location (GEOGRAPHY) a partir de latitude e longitude ao inserir ou atualizar uma morada.',
   },
   {
     name: 'set_driver_location',
@@ -513,7 +513,7 @@ function TableSection({ table }: { table: TableDoc }) {
         </table>
       </div>
       {table.notes && table.notes.length > 0 && (
-        <div className="mb-6 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+        <div className="mb-6 px-4 py-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg text-sm text-orange-800 dark:text-orange-300">
           {table.notes.map((note, i) => (
             <p key={i} className={i > 0 ? 'mt-1' : ''}>
               ⚠ {note}
@@ -592,7 +592,7 @@ export default function DocumentacaoDaApiPage() {
             </h1>
             <p className="text-lg text-gray-600 dark:text-gray-400 max-w-3xl">
               Referência completa do schema do banco de dados Supabase (PostgreSQL) do{' '}
-              <strong>KZ Serviços</strong>. Inclui tabelas, colunas, tipos, enums,
+              <strong>Só Serviços</strong>. Inclui tabelas, colunas, tipos, enums,
               relacionamentos, triggers, políticas RLS e configurações de Realtime.
             </p>
           </header>
@@ -695,9 +695,9 @@ export default function DocumentacaoDaApiPage() {
               Políticas de Segurança em Nível de Linha (RLS)
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
-              Todas as tabelas possuem <strong>Row Level Security (RLS)</strong> habilitado.
+              Todas as tabelas possuem <strong>Row Level Security (RLS)</strong> ativado.
               As políticas são baseadas no papel (<code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">user_role</code>)
-              do usuário autenticado.
+              do utilizador autenticado.
             </p>
             <div className="space-y-4">
               <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-5">
@@ -719,7 +719,7 @@ export default function DocumentacaoDaApiPage() {
                 </h3>
                 <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
                   <li>Podem ler e atualizar o próprio perfil e perfil de prestador/motorista</li>
-                  <li>Podem gerenciar seus veículos e fotos de veículos</li>
+                  <li>Podem gerir os seus veículos e as fotos dos veículos</li>
                   <li>Podem visualizar viagens e solicitações atribuídas a eles</li>
                   <li>Podem atualizar sua localização em tempo real</li>
                   <li>Podem visualizar e enviar mensagens em seus chats</li>
@@ -734,7 +734,7 @@ export default function DocumentacaoDaApiPage() {
                 <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
                   <li>Acesso completo de leitura e escrita a todas as tabelas</li>
                   <li>Podem aprovar/rejeitar perfis de prestadores</li>
-                  <li>Podem gerenciar categorias de serviço e configurações do sistema</li>
+                  <li>Podem gerir as categorias de serviço e as configurações do sistema</li>
                   <li>Podem visualizar e responder comentários privados</li>
                   <li>Podem visualizar todas as viagens, solicitações e avaliações</li>
                 </ul>
@@ -748,7 +748,7 @@ export default function DocumentacaoDaApiPage() {
               Realtime (Publicações)
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
-              As seguintes tabelas estão habilitadas para{' '}
+              As seguintes tabelas estão ativadas para{' '}
               <strong>Supabase Realtime</strong>, permitindo que os clientes recebam
               atualizações em tempo real via WebSockets.
             </p>
@@ -764,7 +764,7 @@ export default function DocumentacaoDaApiPage() {
                 },
                 {
                   table: 'notifications',
-                  desc: 'Notificações entregues em tempo real para a interface do usuário.',
+                  desc: 'Notificações entregues em tempo real para a interface do utilizador.',
                 },
               ].map((item) => (
                 <div
@@ -783,7 +783,7 @@ export default function DocumentacaoDaApiPage() {
           {/* Footer */}
           <footer className="border-t border-gray-200 dark:border-gray-800 pt-6 text-sm text-gray-400 dark:text-gray-600">
             <p>
-              KZ Serviços — Documentação do Banco de Dados • Schema PostgreSQL via Supabase
+              Só Serviços — Documentação do Banco de Dados • Schema PostgreSQL via Supabase
             </p>
           </footer>
         </main>

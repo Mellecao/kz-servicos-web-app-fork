@@ -3,12 +3,8 @@
 import { useState, useEffect, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import { useToast } from "@/components/Toast";
-import {
-  createServiceRequest,
-  createAddress,
-  fetchUsers,
-  fetchServiceCategories,
-} from "@/lib/api";
+import { createServiceRequest, fetchUsers, fetchServiceCategories } from "@/lib/api";
+import { composeServiceDescription, validateServiceAddress } from "@/lib/service-requests";
 import type { User, ServiceCategory } from "@/types/database";
 
 interface NovaSolicitacaoFormProps {
@@ -62,26 +58,26 @@ export default function NovaSolicitacaoForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!clientId || !categoryId || !serviceDate || !description) {
+    if (!clientId || !categoryId || !serviceDate || !description.trim()) {
       toast("warning", "Preencha todos os campos obrigatórios");
+      return;
+    }
+    const addressError = validateServiceAddress(address);
+    if (addressError) {
+      toast("warning", addressError);
       return;
     }
 
     setSubmitting(true);
     try {
-      let addressId: string | null = null;
-      if (address.trim()) {
-        const created = await createAddress({ formatted_address: address });
-        addressId = created.id;
-      }
-
+      // Convenção do app Cliente: a morada vai em `observations` (address_id fica null)
+      // e as notas juntam-se à descrição.
       await createServiceRequest({
         client_id: clientId,
         service_category_id: categoryId,
         service_date: new Date(serviceDate).toISOString(),
-        description,
-        address_id: addressId,
-        observations: observations || null,
+        description: composeServiceDescription(description, observations),
+        observations: address.trim(),
       });
 
       toast("success", "Solicitação criada com sucesso!");
@@ -113,9 +109,9 @@ export default function NovaSolicitacaoForm({
             type="submit"
             form="nova-solicitacao-form"
             disabled={submitting}
-            className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 rounded-lg bg-primary text-on-primary font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "Criando..." : "Criar Solicitação"}
+            {submitting ? "A criar..." : "Criar Solicitação"}
           </button>
         </div>
       }
@@ -179,17 +175,17 @@ export default function NovaSolicitacaoForm({
           />
         </div>
 
-        {/* Endereço */}
+        {/* Morada */}
         <div>
           <label htmlFor="address" className={labelClass}>
-            Endereço
+            Morada *
           </label>
           <input
             id="address"
             type="text"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="Ex: Rua das Flores, 123 - Centro"
+            placeholder="Ex: Rua Rainha Ginga, Ingombota, Luanda"
             className={inputClass}
           />
         </div>
@@ -212,7 +208,7 @@ export default function NovaSolicitacaoForm({
         {/* Observações */}
         <div>
           <label htmlFor="observations" className={labelClass}>
-            Observações
+            Notas
           </label>
           <textarea
             id="observations"

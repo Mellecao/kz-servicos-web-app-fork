@@ -12,6 +12,7 @@ import {
   updateDriverById,
 } from "@/lib/api";
 import type { DriverProfile, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
+import { documentError, documentToSave, formatPhoneAO, maskPhoneAO, phoneError, phoneToSave } from "@/lib/format";
 
 interface NovoMotoristaFormProps {
   open: boolean;
@@ -81,7 +82,7 @@ export default function NovoMotoristaForm({
     setFullName(user?.full_name ?? "");
     setEmail(user?.email ?? "");
     setPassword("");
-    setPhone(user?.phone ?? "");
+    setPhone(user?.phone ? formatPhoneAO(user.phone) : "");
     setCpf(user?.cpf ?? "");
     setProviderStatus(driver.provider_profiles?.status ?? "approved");
     setIsAvailable(driver.is_available);
@@ -119,13 +120,26 @@ export default function NovoMotoristaForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const originalUser = driver?.provider_profiles?.users;
     if (!fullName || !email || (!isEditing && !password)) {
       toast("warning", "Preencha todos os campos obrigatórios");
       return;
     }
 
     if (!isEditing && password.length < 6) {
-      toast("warning", "A senha deve ter pelo menos 6 caracteres");
+      toast("warning", "A palavra-passe deve ter pelo menos 6 caracteres");
+      return;
+    }
+
+    const phoneMsg = phoneError(phone, originalUser?.phone);
+    if (phoneMsg) {
+      toast("warning", phoneMsg);
+      return;
+    }
+
+    const documentMsg = documentError(cpf, originalUser?.cpf);
+    if (documentMsg) {
+      toast("warning", documentMsg);
       return;
     }
 
@@ -149,7 +163,7 @@ export default function NovoMotoristaForm({
     ) {
       toast(
         "warning",
-        "Preencha marca, modelo, ano, cor e placa do veículo."
+        "Preencha marca, modelo, ano, cor e matrícula do veículo."
       );
       return;
     }
@@ -161,7 +175,7 @@ export default function NovoMotoristaForm({
         const userId = driver.provider_profiles?.users?.id;
         const providerProfileId = driver.provider_profile_id;
         if (!userId || !providerProfileId) {
-          toast("danger", "Não foi possível localizar o cadastro do motorista.");
+          toast("danger", "Não foi possível localizar o registo do motorista.");
           return;
         }
 
@@ -171,8 +185,8 @@ export default function NovoMotoristaForm({
           vehicle_id: driver.vehicle?.id ?? null,
           full_name: fullName,
           email,
-          phone: phone || null,
-          cpf: cpf || null,
+          phone: phoneToSave(phone, originalUser?.phone),
+          cpf: documentToSave(cpf, originalUser?.cpf),
           provider_status: providerStatus,
           cnh_number: cnhNumber || null,
           cnh_category: cnhCategory || null,
@@ -193,8 +207,8 @@ export default function NovoMotoristaForm({
           full_name: fullName,
           email,
           password,
-          phone: phone || null,
-          cpf: cpf || null,
+          phone: phoneToSave(phone, originalUser?.phone),
+          cpf: documentToSave(cpf, originalUser?.cpf),
           role: "provider",
         });
 
@@ -243,7 +257,7 @@ export default function NovoMotoristaForm({
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       if (message.includes("already been registered")) {
-        const errorMsg = "Este e-mail já está cadastrado.";
+        const errorMsg = "Este e-mail já está registado.";
         setEmailError(errorMsg);
         toast("danger", errorMsg);
       } else {
@@ -272,11 +286,11 @@ export default function NovoMotoristaForm({
             type="submit"
             form="novo-motorista-form"
             disabled={submitting}
-            className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 rounded-lg bg-primary text-on-primary font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting
-              ? isEditing ? "Salvando..." : "Criando..."
-              : isEditing ? "Salvar Motorista" : "Criar Motorista"}
+              ? isEditing ? "A guardar..." : "A criar..."
+              : isEditing ? "Guardar Motorista" : "Criar Motorista"}
           </button>
         </div>
       }
@@ -325,7 +339,7 @@ export default function NovoMotoristaForm({
 
         <div>
           <label htmlFor="driver-password" className={labelClass}>
-            Senha de acesso {!isEditing && "*"}
+            Palavra-passe de acesso {!isEditing && "*"}
           </label>
           <input
             id="driver-password"
@@ -347,8 +361,8 @@ export default function NovoMotoristaForm({
             id="driver-phone"
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="(00) 00000-0000"
+            onChange={(e) => setPhone(maskPhoneAO(e.target.value))}
+            placeholder="+244 9XX XXX XXX"
             className={inputClass}
           />
         </div>
@@ -357,7 +371,7 @@ export default function NovoMotoristaForm({
           <>
             <div>
               <label htmlFor="driver-status" className={labelClass}>
-                Status do cadastro
+                Estado do registo
               </label>
               <select
                 id="driver-status"
@@ -387,25 +401,25 @@ export default function NovoMotoristaForm({
 
         <div>
           <label htmlFor="driver-cpf" className={labelClass}>
-            CPF
+            BI / NIF
           </label>
           <input
             id="driver-cpf"
             type="text"
             value={cpf}
             onChange={(e) => setCpf(e.target.value)}
-            placeholder="000.000.000-00"
+            placeholder="Nº do BI ou NIF"
             className={inputClass}
           />
         </div>
 
-        {/* Section: CNH */}
+        {/* Section: carta de condução (colunas cnh_*) */}
         <div className="border-t border-border pt-4 mt-2" />
-        <h3 className={sectionClass}>CNH</h3>
+        <h3 className={sectionClass}>Carta de condução</h3>
 
         <div>
           <label htmlFor="driver-cnh" className={labelClass}>
-            Número da CNH
+            Número da carta de condução
           </label>
           <input
             id="driver-cnh"
@@ -514,14 +528,14 @@ export default function NovoMotoristaForm({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="vehicle-plate" className={labelClass}>
-              Placa
+              Matrícula
             </label>
             <input
               id="vehicle-plate"
               type="text"
               value={licensePlate}
               onChange={(e) => setLicensePlate(e.target.value)}
-              placeholder="ABC-1234"
+              placeholder="LD-00-00-AA"
               className={inputClass}
             />
           </div>

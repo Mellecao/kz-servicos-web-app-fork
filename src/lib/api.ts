@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { BRAND } from "@/lib/brand";
 import type {
   User,
   Trip,
@@ -20,12 +21,25 @@ import type {
 } from "@/types/database";
 
 // ─── Admin Logs ────────────────────────────────────────────
-function logAdminAction(
+/**
+ * `entityId` é UUID na base (null para entidades sem id, como definições).
+ * `entityType` tem default 'trip' na base: passar sempre que não for uma viagem.
+ */
+export function logAdminAction(
   action: string,
-  entityId: string,
-  details: Record<string, unknown>
+  entityId: string | null,
+  details: Record<string, unknown>,
+  entityType?: string
 ): void {
-  supabase.from("admin_logs").insert({ action, entity_id: entityId, details }).then();
+  supabase
+    .from("admin_logs")
+    .insert({
+      action,
+      entity_id: entityId,
+      details,
+      ...(entityType ? { entity_type: entityType } : {}),
+    })
+    .then();
 }
 
 export async function fetchAdminLogs(): Promise<AdminLog[]> {
@@ -113,7 +127,7 @@ export async function fetchServiceRequests(): Promise<ServiceRequest[]> {
   const { data, error } = await supabase
     .from("service_requests")
     .select(
-      "*, service_categories(*), addresses(*), users!client_id(*)"
+      "*, service_categories(*), addresses(*), users!client_id(*), provider_profiles(*, users(*))"
     )
     .order("service_date", { ascending: false });
   if (error) throw error;
@@ -217,7 +231,7 @@ export async function cancelTrip(id: string): Promise<void> {
     .update({
       status: "rejected",
       responded_at: new Date().toISOString(),
-      observations: "Corrida cancelada pela KZ",
+      observations: `Viagem cancelada pela ${BRAND.name}`,
     })
     .eq("trip_id", id)
     .in("status", ["pending", "accepted"]);
@@ -341,14 +355,14 @@ export async function resendDriverConfirmationNotification(tripId: string): Prom
   const tripData = data as unknown as ResendTripRow;
 
   if (tripData.status !== "awaiting_driver_confirmation") {
-    throw new Error("A viagem não está aguardando validação do motorista.");
+    throw new Error("A viagem não está a aguardar validação do motorista.");
   }
 
   const driverProfile = firstRelation(tripData.driver_profiles);
   const providerProfile = firstRelation(driverProfile?.provider_profiles);
   const driverUserId = providerProfile?.user_id;
   if (!driverUserId) {
-    throw new Error("Não foi possível localizar o usuário do motorista.");
+    throw new Error("Não foi possível localizar o utilizador do motorista.");
   }
 
   const route =
@@ -360,7 +374,7 @@ export async function resendDriverConfirmationNotification(tripId: string): Prom
     .insert({
       user_id: driverUserId,
       title: "Confirme o agendamento",
-      body: `O passageiro aceitou sua proposta para ${route}. Confirme ou recuse o agendamento.`,
+      body: `O passageiro aceitou a sua proposta para ${route}. Confirme ou recuse o agendamento.`,
       type: "trip_driver_confirmation",
       reference_type: "trip",
       reference_id: tripId,
@@ -838,7 +852,7 @@ export async function createUser(user: {
     body: JSON.stringify(user),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Erro ao criar usuário");
+  if (!res.ok) throw new Error(data.error || "Erro ao criar utilizador");
   return data as User;
 }
 
@@ -848,7 +862,7 @@ export async function deleteUserById(id: string): Promise<void> {
     method: "DELETE",
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Erro ao excluir usuário");
+  if (!res.ok) throw new Error(data.error || "Erro ao eliminar utilizador");
 }
 
 // ─── Update User ───────────────────────────────────────────
@@ -869,7 +883,7 @@ export async function updateUserById(
     body: JSON.stringify(user),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Erro ao atualizar usuário");
+  if (!res.ok) throw new Error(data.error || "Erro ao atualizar utilizador");
   return data as User;
 }
 

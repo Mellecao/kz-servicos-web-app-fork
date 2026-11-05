@@ -5,10 +5,8 @@ import { fetchClients, deleteUserById } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import type { User } from "@/types/database";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
+import { formatDate, formatPhoneAO, phoneMatches } from "@/lib/format";
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
 
 function getInitials(name: string): string {
   return name
@@ -47,7 +45,7 @@ export default function ClientesPage() {
   async function handleDeleteClient(client: User) {
     const name = client.full_name || client.email;
     const confirmed = window.confirm(
-      `Excluir ${name}? Essa ação apaga o cliente e o acesso ao app.`
+      `Eliminar ${name}? Essa ação apaga o cliente e o acesso ao app.`
     );
     if (!confirmed) return;
 
@@ -58,7 +56,7 @@ export default function ClientesPage() {
       await loadClients();
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      toast("danger", message || "Erro ao excluir cliente.");
+      toast("danger", message || "Erro ao eliminar cliente.");
     } finally {
       setDeletingUserId(null);
     }
@@ -69,7 +67,7 @@ export default function ClientesPage() {
     return (
       c.full_name.toLowerCase().includes(q) ||
       c.email.toLowerCase().includes(q) ||
-      (c.phone ?? "").toLowerCase().includes(q)
+      phoneMatches(c.phone, search)
     );
   });
 
@@ -82,7 +80,7 @@ export default function ClientesPage() {
             Clientes
           </h1>
           <p className="text-contrast text-sm mt-1">
-            Gerencie os clientes da plataforma
+            Faça a gestão dos clientes da plataforma
           </p>
         </div>
         <button
@@ -90,7 +88,7 @@ export default function ClientesPage() {
             setEditingClient(null);
             setShowForm(true);
           }}
-          className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
+          className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
         >
           + Novo Cliente
         </button>
@@ -100,7 +98,7 @@ export default function ClientesPage() {
       <div className="mb-5">
         <input
           type="text"
-          placeholder="Buscar por nome, e-mail ou telefone..."
+          placeholder="Procurar por nome, e-mail ou telefone..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full md:w-auto max-w-md px-4 py-2.5 rounded-lg border border-border bg-background text-dark placeholder:text-contrast/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
@@ -113,7 +111,7 @@ export default function ClientesPage() {
           onClick={() => setViewMode("cards")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "cards"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -135,7 +133,7 @@ export default function ClientesPage() {
           onClick={() => setViewMode("table")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "table"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -167,7 +165,7 @@ export default function ClientesPage() {
               key={client.id}
               className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary text-sm font-semibold flex-shrink-0">
                 {getInitials(client.full_name || client.email)}
               </div>
               <div className="flex-1 min-w-0">
@@ -205,8 +203,8 @@ export default function ClientesPage() {
                 onClick={() => handleDeleteClient(client)}
                 disabled={deletingUserId === client.id}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger/30 text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label={`Excluir ${client.full_name || client.email}`}
-                title="Excluir cliente"
+                aria-label={`Eliminar ${client.full_name || client.email}`}
+                title="Eliminar cliente"
               >
                 <svg
                   className="h-4 w-4"
@@ -241,10 +239,10 @@ export default function ClientesPage() {
                     Telefone
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    Status
+                    Estado
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    Cadastro
+                    Registo
                   </th>
                   <th className="text-right px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
                     Ações
@@ -277,7 +275,7 @@ export default function ClientesPage() {
                       {client.email}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-contrast">
-                      {client.phone ?? "—"}
+                      {formatPhoneAO(client.phone)}
                     </td>
                     <td className="px-5 py-3.5">
                       <span
@@ -341,7 +339,7 @@ export default function ClientesPage() {
                             d="M3 6h18M8 6V4h8v2m-7 0h6m-8 0 1 14h8l1-14"
                           />
                         </svg>
-                        {deletingUserId === client.id ? "Excluindo..." : "Excluir"}
+                        {deletingUserId === client.id ? "A eliminar..." : "Eliminar"}
                       </button>
                     </td>
                   </tr>

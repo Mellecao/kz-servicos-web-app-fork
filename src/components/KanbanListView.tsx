@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { type KanbanCard, type KanbanColumn } from "@/components/KanbanBoard";
+import { BRAND } from "@/lib/brand";
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -93,8 +94,8 @@ function CardItem({
           <span
             className="text-xs px-2 py-0.5 rounded-full font-medium"
             style={{
-              backgroundColor: `${card.tagColor || "#FEBF22"}20`,
-              color: card.tagColor || "#FEBF22",
+              backgroundColor: `${card.tagColor || BRAND.colors.primary}20`,
+              color: card.tagColor || BRAND.colors.primary,
             }}
           >
             {card.tag}

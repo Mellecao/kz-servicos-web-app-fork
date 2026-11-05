@@ -14,15 +14,17 @@ import {
   showNotification,
 } from "@/lib/notifications";
 import type { Trip, TripStatus } from "@/types/database";
+import { BRAND } from "@/lib/brand";
+import { formatDateTime } from "@/lib/format";
 
 const tripColumnConfig: { id: TripStatus; title: string; color: string }[] = [
-  { id: "open", title: "Aberta", color: "#FEBF22" },
+  { id: "open", title: "Aberta", color: BRAND.colors.primary },
   { id: "under_review", title: "Em Análise", color: "#5C5956" },
-  { id: "searching_drivers", title: "Buscando Motorista", color: "#2261FE" },
-  { id: "awaiting_client_confirmation", title: "Aguardando Cliente", color: "#f97316" },
-  { id: "awaiting_driver_confirmation", title: "Aguardando Validação Motorista", color: "#f97316" },
+  { id: "searching_drivers", title: "A Procurar Motorista", color: "#2261FE" },
+  { id: "awaiting_client_confirmation", title: "A Aguardar Cliente", color: "#f97316" },
+  { id: "awaiting_driver_confirmation", title: "A Aguardar Validação Motorista", color: "#f97316" },
   { id: "scheduled", title: "Agendada", color: "#2261FE" },
-  { id: "started", title: "Em Andamento", color: "#22c55e" },
+  { id: "started", title: "Em curso", color: "#22c55e" },
   { id: "finished", title: "Finalizada", color: "#22c55e" },
   { id: "cancelled", title: "Cancelada", color: "#ef4444" },
 ];
@@ -33,15 +35,6 @@ function shortenAddress(addr: string | undefined | null) {
   return parts[0]?.trim() ?? addr;
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function ViagensPage() {
   const { toast } = useToast();
@@ -79,7 +72,7 @@ export default function ViagensPage() {
           const next = payload.new as Trip;
           showNotification(
             "Nova viagem solicitada",
-            `Status: ${labelForTripStatus(next.status)}`
+            `Estado: ${labelForTripStatus(next.status)}`
           );
           loadTrips();
         }
@@ -95,7 +88,7 @@ export default function ViagensPage() {
           if (prev.status !== undefined && prev.status !== next.status) {
             showNotification(
               "Viagem atualizada",
-              `Status: ${labelForTripStatus(prev.status)} → ${labelForTripStatus(next.status)}`
+              `Estado: ${labelForTripStatus(prev.status)} → ${labelForTripStatus(next.status)}`
             );
           }
           loadTrips();
@@ -121,7 +114,7 @@ export default function ViagensPage() {
       );
       try {
         await updateTripStatus(cardId, newStatus);
-        toast("success", "Status da viagem atualizado");
+        toast("success", "Estado da viagem atualizado");
       } catch {
         toast("danger", "Erro ao atualizar status");
         loadTrips(); // Rollback
@@ -146,7 +139,7 @@ export default function ViagensPage() {
         id: t.id,
         title: `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`,
         subtitle: `${t.users?.full_name ?? "—"} • ${t.passenger_count} passageiro${t.passenger_count !== 1 ? "s" : ""}`,
-        date: formatDate(t.scheduled_datetime),
+        date: formatDateTime(t.scheduled_datetime),
         ...(t.is_round_trip ? { tag: "Ida e volta", tagColor: "#2261FE" } : {}),
         ...(t.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),
       })),
@@ -155,7 +148,7 @@ export default function ViagensPage() {
 
   const listActionConfig: Record<string, { actionLabel: string; nextColumnId: string }> = {
     open: { actionLabel: "Aprovar", nextColumnId: "under_review" },
-    under_review: { actionLabel: "Buscar Motorista", nextColumnId: "searching_drivers" },
+    under_review: { actionLabel: "Procurar Motorista", nextColumnId: "searching_drivers" },
     searching_drivers: { actionLabel: "Aguardar cliente", nextColumnId: "awaiting_client_confirmation" },
     awaiting_client_confirmation: { actionLabel: "Validar motorista", nextColumnId: "awaiting_driver_confirmation" },
     awaiting_driver_confirmation: { actionLabel: "Agendar", nextColumnId: "scheduled" },
@@ -175,12 +168,12 @@ export default function ViagensPage() {
         <div>
           <h1 className="text-xl md:text-3xl font-heading font-black text-dark">Viagens</h1>
           <p className="text-contrast text-sm mt-1">
-            Gerencie todas as viagens da plataforma
+            Faça a gestão de todas as viagens da plataforma
           </p>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-primary text-background px-3 py-2 md:px-5 md:py-2.5 rounded-lg font-heading font-bold text-xs md:text-sm whitespace-nowrap hover:bg-primary-dark transition-colors duration-200 cursor-pointer"
+          className="bg-primary text-on-primary px-3 py-2 md:px-5 md:py-2.5 rounded-lg font-heading font-bold text-xs md:text-sm whitespace-nowrap hover:bg-primary-dark transition-colors duration-200 cursor-pointer"
         >
           + Nova Viagem
         </button>
@@ -191,7 +184,7 @@ export default function ViagensPage() {
         <button
           onClick={() => setViewMode('list')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            viewMode === 'list' ? 'bg-primary text-background' : 'bg-surface border border-border text-dark'
+            viewMode === 'list' ? 'bg-primary text-on-primary' : 'bg-surface border border-border text-dark'
           }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -203,7 +196,7 @@ export default function ViagensPage() {
         <button
           onClick={() => setViewMode('board')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            viewMode === 'board' ? 'bg-primary text-background' : 'bg-surface border border-border text-dark'
+            viewMode === 'board' ? 'bg-primary text-on-primary' : 'bg-surface border border-border text-dark'
           }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -216,7 +209,7 @@ export default function ViagensPage() {
 
       {/* Kanban */}
       {loading ? (
-        <div className="text-center py-16 text-contrast text-sm">Carregando viagens...</div>
+        <div className="text-center py-16 text-contrast text-sm">A carregar viagens...</div>
       ) : viewMode === 'list' ? (
         <KanbanListView
           columns={listColumns}

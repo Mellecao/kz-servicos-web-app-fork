@@ -6,6 +6,7 @@ import Modal from "@/components/Modal";
 import { useToast } from "@/components/Toast";
 import { createUser, updateUserById } from "@/lib/api";
 import type { User } from "@/types/database";
+import { documentError, documentToSave, formatPhoneAO, maskPhoneAO, phoneError, phoneToSave } from "@/lib/format";
 
 interface NovoClienteFormProps {
   open: boolean;
@@ -53,7 +54,7 @@ export default function NovoClienteForm({
     setFullName(client.full_name ?? "");
     setEmail(client.email ?? "");
     setPassword("");
-    setPhone(client.phone ?? "");
+    setPhone(client.phone ? formatPhoneAO(client.phone) : "");
     setCpf(client.cpf ?? "");
     setDateOfBirth(client.date_of_birth ?? "");
     setIsActive(client.is_active);
@@ -81,7 +82,20 @@ export default function NovoClienteForm({
     }
 
     if (!isEditing && password.length < 6) {
-      toast("warning", "A senha deve ter pelo menos 6 caracteres");
+      toast("warning", "A palavra-passe deve ter pelo menos 6 caracteres");
+      return;
+    }
+
+    const phoneMsg = phoneError(phone, client?.phone);
+    if (phoneMsg) {
+      toast("warning", phoneMsg);
+      return;
+    }
+
+    const documentMsg = documentError(cpf, client?.cpf);
+    if (documentMsg) {
+      setCpfError(documentMsg);
+      toast("warning", documentMsg);
       return;
     }
 
@@ -93,8 +107,8 @@ export default function NovoClienteForm({
         await updateUserById(client.id, {
           full_name: fullName,
           email,
-          phone: phone || null,
-          cpf: cpf || null,
+          phone: phoneToSave(phone, client.phone),
+          cpf: documentToSave(cpf, client.cpf),
           date_of_birth: dateOfBirth || null,
           is_active: isActive,
         });
@@ -103,8 +117,8 @@ export default function NovoClienteForm({
           full_name: fullName,
           email,
           password,
-          phone: phone || null,
-          cpf: cpf || null,
+          phone: phoneToSave(phone, null),
+          cpf: documentToSave(cpf, null),
           role: "client",
           date_of_birth: dateOfBirth || null,
         });
@@ -117,11 +131,11 @@ export default function NovoClienteForm({
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       if (message.includes("users_cpf_key")) {
-        const errorMsg = "Este CPF já está cadastrado.";
+        const errorMsg = "Este BI / NIF já está registado.";
         setCpfError(errorMsg);
         toast("danger", errorMsg);
       } else if (message.includes("already been registered")) {
-        const errorMsg = "Este e-mail já está cadastrado.";
+        const errorMsg = "Este e-mail já está registado.";
         setEmailError(errorMsg);
         toast("danger", errorMsg);
       } else {
@@ -145,11 +159,11 @@ export default function NovoClienteForm({
         type="submit"
         form="novo-cliente-form"
         disabled={submitting}
-        className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-5 py-2 rounded-lg bg-primary text-on-primary font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {submitting
-          ? isEditing ? "Salvando..." : "Criando..."
-          : isEditing ? "Salvar Cliente" : "Criar Cliente"}
+          ? isEditing ? "A guardar..." : "A criar..."
+          : isEditing ? "Guardar Cliente" : "Criar Cliente"}
       </button>
     </div>
   );
@@ -196,7 +210,7 @@ export default function NovoClienteForm({
 
       <div>
         <label htmlFor="client-password" className={labelClass}>
-          Senha {!isEditing && "*"}
+          Palavra-passe {!isEditing && "*"}
         </label>
         <input
           id="client-password"
@@ -218,15 +232,15 @@ export default function NovoClienteForm({
           id="client-phone"
           type="tel"
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="(00) 00000-0000"
+          onChange={(e) => setPhone(maskPhoneAO(e.target.value))}
+          placeholder="+244 9XX XXX XXX"
           className={inputClass}
         />
       </div>
 
       <div>
         <label htmlFor="client-cpf" className={labelClass}>
-          CPF
+          BI / NIF
         </label>
         <input
           id="client-cpf"
@@ -236,7 +250,7 @@ export default function NovoClienteForm({
             setCpf(e.target.value);
             if (cpfError) setCpfError("");
           }}
-          placeholder="000.000.000-00"
+          placeholder="Nº do BI ou NIF"
           className={cpfError ? inputErrorClass : inputClass}
         />
         {cpfError && (

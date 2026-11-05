@@ -61,6 +61,27 @@ function CloseIcon() {
   );
 }
 
+function PedidosProdutosIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <path d="M16 10a4 4 0 0 1-8 0" />
+    </svg>
+  );
+}
+
+function ProdutosIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m7.5 4.27 9 5.15" />
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </svg>
+  );
+}
+
 function ClientesIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -138,10 +159,12 @@ function LogsIcon() {
 }
 
 const drawerItems = [
+  { href: "/pedidos-produtos", label: "Pedidos de Produtos", icon: <PedidosProdutosIcon /> },
+  { href: "/produtos", label: "Produtos", icon: <ProdutosIcon /> },
   { href: "/clientes", label: "Clientes", icon: <ClientesIcon /> },
   { href: "/motoristas", label: "Motoristas", icon: <MotoristasIcon /> },
   { href: "/prestadores", label: "Prestadores", icon: <PrestadoresIcon /> },
-  { href: "/usuarios", label: "Usuários", icon: <UsuariosIcon /> },
+  { href: "/usuarios", label: "Utilizadores", icon: <UsuariosIcon /> },
   { href: "/logs", label: "Logs", icon: <LogsIcon /> },
 ];
 
@@ -156,7 +179,7 @@ export default function MobileNav() {
   const displayName =
     userProfile?.full_name ||
     session?.user?.user_metadata?.full_name ||
-    "Usuário";
+    "Utilizador";
   const displayEmail = userProfile?.email || session?.user?.email || "";
   const initials = displayName
     .split(" ")
@@ -275,7 +298,7 @@ export default function MobileNav() {
                     onClick={handleDrawerLinkClick}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
                       isActive
-                        ? "bg-primary text-background border-primary font-semibold"
+                        ? "bg-primary text-on-primary border-primary font-semibold"
                         : "bg-surface-hover text-dark border-border hover:border-primary/40"
                     }`}
                   >
@@ -303,7 +326,7 @@ export default function MobileNav() {
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-danger/10 text-danger hover:bg-danger/20 transition-colors font-medium text-sm cursor-pointer"
             >
               <LogoutIcon />
-              Sair
+              Terminar sessão
             </button>
           </div>
         </>

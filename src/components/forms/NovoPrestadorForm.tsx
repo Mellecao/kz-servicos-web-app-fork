@@ -9,6 +9,7 @@ import {
   fetchServiceCategories,
 } from "@/lib/api";
 import type { ServiceCategory } from "@/types/database";
+import { documentError, documentToSave, maskPhoneAO, phoneError, phoneToSave } from "@/lib/format";
 
 interface NovoPrestadorFormProps {
   open: boolean;
@@ -74,14 +75,26 @@ export default function NovoPrestadorForm({
       return;
     }
 
+    const phoneMsg = phoneError(phone, null);
+    if (phoneMsg) {
+      toast("warning", phoneMsg);
+      return;
+    }
+
+    const documentMsg = documentError(cpf, null);
+    if (documentMsg) {
+      toast("warning", documentMsg);
+      return;
+    }
+
     setSubmitting(true);
     try {
       // 1. Create user
       const user = await createUser({
         full_name: fullName,
         email,
-        phone: phone || null,
-        cpf: cpf || null,
+        phone: phoneToSave(phone, null),
+        cpf: documentToSave(cpf, null),
         role: "provider",
       });
 
@@ -123,9 +136,9 @@ export default function NovoPrestadorForm({
             type="submit"
             form="novo-prestador-form"
             disabled={submitting}
-            className="px-5 py-2 rounded-lg bg-primary text-background font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 rounded-lg bg-primary text-on-primary font-heading font-bold text-sm hover:bg-primary-dark transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "Criando..." : "Criar Prestador"}
+            {submitting ? "A criar..." : "Criar Prestador"}
           </button>
         </div>
       }
@@ -174,22 +187,22 @@ export default function NovoPrestadorForm({
             id="provider-phone"
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="(00) 00000-0000"
+            onChange={(e) => setPhone(maskPhoneAO(e.target.value))}
+            placeholder="+244 9XX XXX XXX"
             className={inputClass}
           />
         </div>
 
         <div>
           <label htmlFor="provider-cpf" className={labelClass}>
-            CPF
+            BI / NIF
           </label>
           <input
             id="provider-cpf"
             type="text"
             value={cpf}
             onChange={(e) => setCpf(e.target.value)}
-            placeholder="000.000.000-00"
+            placeholder="Nº do BI ou NIF"
             className={inputClass}
           />
         </div>
@@ -253,7 +266,7 @@ export default function NovoPrestadorForm({
             className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary cursor-pointer"
           />
           <label htmlFor="provider-invoice" className="text-sm font-body text-dark cursor-pointer">
-            Emite nota fiscal
+            Emite fatura
           </label>
         </div>
       </form>

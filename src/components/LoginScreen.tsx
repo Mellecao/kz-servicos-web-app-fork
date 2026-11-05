@@ -1,9 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import BrandLogo from "@/components/BrandLogo";
 import { resetPassword, signIn } from "@/lib/api";
+import { BRAND } from "@/lib/brand";
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -47,7 +48,7 @@ export default function LoginScreen() {
       router.push("/dashboard");
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Erro ao fazer login";
+        err instanceof Error ? err.message : "Erro ao iniciar sessão";
       setError(message);
     } finally {
       setLoading(false);
@@ -62,7 +63,7 @@ export default function LoginScreen() {
 
     try {
       await resetPassword(forgotEmail);
-      setSuccess("Instrucoes de recuperacao enviadas para o seu e-mail.");
+      setSuccess("Instruções de recuperação enviadas para o seu e-mail.");
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Erro ao enviar e-mail";
@@ -73,39 +74,32 @@ export default function LoginScreen() {
   }
 
   const inputClasses =
-    "w-full rounded-lg border border-[#334155] bg-[#0F172A] px-4 py-3 text-sm text-[#F8FAFC] placeholder:text-[#94A3B8]/60 transition-all duration-200 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#FEBF22]";
+    "w-full rounded-lg border border-[#334155] bg-[#0F172A] px-4 py-3 text-sm text-[#F8FAFC] placeholder:text-[#94A3B8]/60 transition-all duration-200 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary";
 
   return (
     <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#0F172A] px-5 py-10 text-[#F8FAFC] sm:px-8">
-      <Image
-        src="/assets/logo.png"
-        alt="KZ Servicos"
-        width={890}
-        height={494}
-        priority
-        className="absolute right-5 top-5 h-10 w-auto object-contain sm:right-8 sm:top-8 sm:h-12"
-      />
-
       <section className="w-full max-w-md">
         <div className="mb-8 flex justify-center">
-          <Image
-            src="/assets/logo.png"
-            alt="KZ Servicos"
-            width={890}
-            height={494}
+          <BrandLogo
+            variant="onDark"
             priority
             className="h-20 w-auto object-contain sm:h-24"
           />
         </div>
 
-        <div className="rounded-lg border border-[#334155] bg-[#1E293B] p-7 shadow-2xl shadow-black/25 sm:p-9">
+        <div className="relative overflow-hidden rounded-lg border border-[#334155] bg-[#1E293B] p-7 shadow-2xl shadow-black/25 sm:p-9">
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-1"
+            style={{ background: BRAND.gradient }}
+          />
           {!showForgotPassword ? (
             <>
               <h1 className="mb-1 text-2xl font-black text-[#F8FAFC]">
-                Painel ADM
+                Painel administrativo
               </h1>
               <p className="mb-8 text-sm text-[#94A3B8]">
-                Acesse sua conta para gerenciar a plataforma
+                Aceda à sua conta para gerir a plataforma
               </p>
 
               {error && (
@@ -137,7 +131,7 @@ export default function LoginScreen() {
 
                 <div>
                   <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-[#F8FAFC]">
-                    Senha
+                    Palavra-passe
                   </label>
                   <div className="relative">
                     <input
@@ -154,7 +148,7 @@ export default function LoginScreen() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-[#94A3B8] transition-colors duration-200 hover:text-[#F8FAFC]"
                       tabIndex={-1}
-                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                      aria-label={showPassword ? "Ocultar palavra-passe" : "Mostrar palavra-passe"}
                     >
                       <EyeIcon open={showPassword} />
                     </button>
@@ -168,15 +162,15 @@ export default function LoginScreen() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 cursor-pointer rounded border-[#334155] text-primary focus:ring-primary focus:ring-offset-0"
                   />
-                  <span className="text-sm text-[#94A3B8]">Lembrar de mim</span>
+                  <span className="text-sm text-[#94A3B8]">Lembrar-me</span>
                 </label>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full cursor-pointer rounded-lg bg-primary py-3.5 text-sm font-bold text-[#0F172A] shadow-md shadow-primary/20 transition-all duration-200 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full cursor-pointer rounded-lg bg-primary py-3.5 text-sm font-bold text-on-primary shadow-md shadow-primary/20 transition-all duration-200 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? "Entrando..." : "Entrar"}
+                  {loading ? "A entrar..." : "Iniciar sessão"}
                 </button>
               </form>
 
@@ -189,17 +183,17 @@ export default function LoginScreen() {
                   }}
                   className="cursor-pointer text-sm font-medium text-primary transition-colors duration-200 hover:text-primary-dark"
                 >
-                  Esqueci minha senha
+                  Esqueci-me da palavra-passe
                 </button>
               </div>
             </>
           ) : (
             <>
               <h1 className="mb-1 text-2xl font-black text-[#F8FAFC]">
-                Recuperar senha
+                Recuperar palavra-passe
               </h1>
               <p className="mb-8 text-sm text-[#94A3B8]">
-                Informe seu e-mail para receber as instrucoes de recuperacao
+                Indique o seu e-mail para receber as instruções de recuperação
               </p>
 
               {error && (
@@ -233,9 +227,9 @@ export default function LoginScreen() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full cursor-pointer rounded-lg bg-primary py-3.5 text-sm font-bold text-[#0F172A] shadow-md shadow-primary/20 transition-all duration-200 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full cursor-pointer rounded-lg bg-primary py-3.5 text-sm font-bold text-on-primary shadow-md shadow-primary/20 transition-all duration-200 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? "Enviando..." : "Enviar instrucoes"}
+                  {loading ? "A enviar..." : "Enviar instruções"}
                 </button>
               </form>
 
@@ -252,7 +246,7 @@ export default function LoginScreen() {
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                     <path d="m15 18-6-6 6-6" />
                   </svg>
-                  Voltar para o login
+                  Voltar ao início de sessão
                 </button>
               </div>
             </>

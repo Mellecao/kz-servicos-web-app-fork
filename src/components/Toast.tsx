@@ -8,6 +8,7 @@ import {
   useRef,
   useEffect,
 } from "react";
+import { BRAND } from "@/lib/brand";
 
 type ToastType = "success" | "info" | "warning" | "danger";
 
@@ -65,7 +66,7 @@ const icons: Record<ToastType, React.ReactNode> = {
 const colors: Record<ToastType, { bg: string; border: string; text: string; progress: string }> = {
   success: { bg: "rgba(34,197,94,0.08)", border: "#22C55E", text: "#22C55E", progress: "#22C55E" },
   info: { bg: "rgba(148,163,184,0.08)", border: "#94A3B8", text: "#94A3B8", progress: "#94A3B8" },
-  warning: { bg: "rgba(245,158,11,0.08)", border: "#F59E0B", text: "#F59E0B", progress: "#F59E0B" },
+  warning: { bg: "rgba(255,154,82,0.08)", border: BRAND.colors.primary, text: BRAND.colors.primary, progress: BRAND.colors.primary },
   danger: { bg: "rgba(239,68,68,0.08)", border: "#EF4444", text: "#EF4444", progress: "#EF4444" },
 };
 
@@ -139,7 +140,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext value={{ toast: addToast }}>
       {children}
       {/* Toast container */}
-      <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 w-96 max-w-[calc(100vw-2rem)] pointer-events-none">
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 w-96 max-w-[calc(100vw-2rem)] pointer-events-none">
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onRemove={removeToast} />
         ))}

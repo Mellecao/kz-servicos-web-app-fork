@@ -17,7 +17,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "ID do usuário é obrigatório" }, { status: 400 });
+      return NextResponse.json({ error: "ID do utilizador é obrigatório" }, { status: 400 });
     }
 
     const body = (await request.json().catch(() => ({}))) as UserPatchBody;
@@ -76,7 +76,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "ID do usuário é obrigatório" }, { status: 400 });
+      return NextResponse.json({ error: "ID do utilizador é obrigatório" }, { status: 400 });
     }
 
     const admin = getSupabaseAdmin();

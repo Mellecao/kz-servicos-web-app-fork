@@ -16,6 +16,8 @@ export type ServiceRequestStatus =
   | "under_review"
   | "review_rejected"
   | "searching_provider"
+  | "awaiting_client_confirmation"
+  | "awaiting_provider_confirmation"
   | "assigned"
   | "in_progress"
   | "finished"
@@ -189,6 +191,24 @@ export interface ServiceRequest {
   users?: User;
 }
 
+export type ServiceCandidateStatus = "pending" | "accepted" | "rejected";
+
+/** Convite de um prestador a um serviço (service_request_provider_candidates). */
+export interface ServiceCandidate {
+  id: string;
+  service_request_id: string;
+  provider_profile_id: string;
+  status: ServiceCandidateStatus;
+  offered_price: number | null;
+  kz_proposed_price: number | null;
+  admin_approved: boolean;
+  invited_at: string;
+  responded_at: string | null;
+  observations: string | null;
+  // Relations
+  provider_profiles?: ProviderProfile & { users?: User };
+}
+
 // Unified financial record from trips and service_requests
 export interface Debito {
   id: string;
@@ -251,8 +271,73 @@ export interface Database {
       trips: { Row: Trip };
       service_requests: { Row: ServiceRequest };
       admin_logs: { Row: AdminLog };
+      products: { Row: Product };
+      product_orders: { Row: ProductOrder };
+      product_order_items: { Row: ProductOrderItem };
     };
   };
+}
+
+// ─── Módulo de produtos (migration 20261105120000_products_module) ─────────
+
+/** pending → confirmed → out_for_delivery → delivered, ou cancelled. */
+export type ProductOrderStatus =
+  | "pending"
+  | "confirmed"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled";
+
+export interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  unit_label: string;
+  /** Kwanzas (numeric(12,2)). */
+  price: number;
+  image_url: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductOrderItem {
+  id: string;
+  order_id: string;
+  product_id: string;
+  /** Nome e preço são copiados do catálogo no momento do pedido. */
+  product_name: string;
+  unit_price: number;
+  quantity: number;
+  /** Coluna gerada: unit_price * quantity. */
+  line_total: number;
+}
+
+export interface ProductOrder {
+  id: string;
+  client_id: string;
+  status: ProductOrderStatus;
+  delivery_address: string;
+  delivery_reference: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
+  contact_phone: string | null;
+  notes: string | null;
+  payment_method: PaymentMethod;
+  subtotal: number;
+  delivery_fee: number;
+  total: number;
+  cancel_reason: string | null;
+  confirmed_at: string | null;
+  delivered_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Embutidos pelo select de fetchProductOrders. */
+  users?: Pick<User, "id" | "full_name" | "email" | "phone"> | null;
+  product_order_items?: ProductOrderItem[];
 }
 
 export interface AdminLog {

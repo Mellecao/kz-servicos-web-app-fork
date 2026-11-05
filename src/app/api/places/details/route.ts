@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ANGOLA_REGION_CODE, PLACES_LANGUAGE_CODE } from "@/lib/geo";
 
 type GoogleAddressComponent = {
   longText?: string;
@@ -39,8 +40,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "placeId é obrigatório" }, { status: 400 });
   }
 
+  const query = new URLSearchParams({
+    languageCode: PLACES_LANGUAGE_CODE,
+    regionCode: ANGOLA_REGION_CODE,
+  });
   const response = await fetch(
-    `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+    `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?${query}`,
     {
       headers: {
         "X-Goog-Api-Key": apiKey,
@@ -52,7 +57,7 @@ export async function GET(request: NextRequest) {
 
   if (!response.ok) {
     return NextResponse.json(
-      { error: "Erro ao buscar detalhes no Google Places" },
+      { error: "Erro ao procurar detalhes no Google Places" },
       { status: response.status }
     );
   }

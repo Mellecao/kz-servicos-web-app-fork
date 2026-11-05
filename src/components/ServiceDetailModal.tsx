@@ -3,7 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ServiceRequest, PaymentMethod } from "@/types/database";
 import { updateServiceRequestFinancial } from "@/lib/api";
+import ServiceFlowPanel from "@/components/ServiceFlowPanel";
+import ServiceHistory from "@/components/ServiceHistory";
+import ServicePhotos from "@/components/ServicePhotos";
 import { useToast } from "@/components/Toast";
+import { BRAND } from "@/lib/brand";
+import { formatDateTime, formatKz } from "@/lib/format";
+import { PAYMENT_OPTIONS, formatPaymentMethod } from "@/lib/payment";
+import { SERVICE_STATUS_COLORS } from "@/lib/service-request-colors";
+import { SERVICE_STATUS_LABELS, serviceAddress } from "@/lib/service-requests";
 
 interface ServiceDetailModalProps {
   request: ServiceRequest | null;
@@ -12,42 +20,7 @@ interface ServiceDetailModalProps {
   onUpdate?: () => void;
 }
 
-const statusLabels: Record<string, string> = {
-  open: "Aberto",
-  under_review: "Em Análise",
-  review_rejected: "Rejeitado na Análise",
-  searching_provider: "Buscando Prestador",
-  assigned: "Atribuído",
-  in_progress: "Em Andamento",
-  finished: "Finalizado",
-  cancelled: "Cancelado",
-};
 
-const statusColors: Record<string, { bg: string; text: string }> = {
-  open: { bg: "#FEBF2220", text: "#FEBF22" },
-  under_review: { bg: "#94A3B820", text: "#94A3B8" },
-  review_rejected: { bg: "#ef444420", text: "#ef4444" },
-  searching_provider: { bg: "#2261FE20", text: "#2261FE" },
-  assigned: { bg: "#2261FE20", text: "#2261FE" },
-  in_progress: { bg: "#22c55e20", text: "#22c55e" },
-  finished: { bg: "#22c55e20", text: "#22c55e" },
-  cancelled: { bg: "#ef444420", text: "#ef4444" },
-};
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatCurrency(value: number | null | undefined) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-}
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -121,7 +94,9 @@ export default function ServiceDetailModal({
   if (!open || !request) return null;
 
   const r = request;
-  const statusColor = statusColors[r.status] ?? { bg: "#FEBF2220", text: "#FEBF22" };
+  const { address, notes } = serviceAddress(r);
+  const statusHex = SERVICE_STATUS_COLORS[r.status] ?? BRAND.colors.primary;
+  const statusColor = { bg: `${statusHex}20`, text: statusHex };
 
   async function handleToggleIsPaid() {
     const next = !isPaid;
@@ -155,10 +130,10 @@ export default function ServiceDetailModal({
         final_price: parsedPrice,
         payment_method: paymentMethodInput || null,
       });
-      toast("success", "Dados financeiros salvos");
+      toast("success", "Dados financeiros guardados");
       onUpdate?.();
     } catch {
-      toast("danger", "Erro ao salvar dados financeiros");
+      toast("danger", "Erro ao guardar dados financeiros");
     } finally {
       setFinancialSaving(false);
     }
@@ -222,17 +197,15 @@ export default function ServiceDetailModal({
                   className="text-xs px-2 py-0.5 rounded-full font-medium"
                   style={{ backgroundColor: statusColor.bg, color: statusColor.text }}
                 >
-                  {statusLabels[r.status] ?? r.status}
+                  {SERVICE_STATUS_LABELS[r.status] ?? r.status}
                 </span>
               }
             />
             <InfoRow label="Cliente" value={r.users?.full_name ?? "—"} />
             <InfoRow label="Categoria" value={r.service_categories?.name ?? "—"} />
-            <InfoRow label="Data do serviço" value={formatDate(r.service_date)} />
+            <InfoRow label="Data do serviço" value={formatDateTime(r.service_date)} />
 
-            {r.addresses && (
-              <InfoRow label="Endereço" value={r.addresses.formatted_address} />
-            )}
+            {address && <InfoRow label="Morada" value={address} />}
 
             {r.provider_profiles?.users && (
               <InfoRow label="Prestador" value={r.provider_profiles.users.full_name} />
@@ -243,10 +216,10 @@ export default function ServiceDetailModal({
               <p className="text-xs text-dark leading-relaxed">{r.description}</p>
             </div>
 
-            {r.observations && (
+            {notes && (
               <div className="mt-3 p-3 rounded-lg bg-background border border-border">
                 <p className="text-xs text-contrast mb-1 font-medium">Observações</p>
-                <p className="text-xs text-dark">{r.observations}</p>
+                <p className="text-xs text-dark">{notes}</p>
               </div>
             )}
 
@@ -256,6 +229,12 @@ export default function ServiceDetailModal({
                 <p className="text-xs text-dark">{r.provider_observations}</p>
               </div>
             )}
+
+            <ServicePhotos key={`photos-${r.id}`} requestId={r.id} />
+
+            <ServiceFlowPanel key={r.id} request={r} onChanged={() => onUpdate?.()} />
+
+            <ServiceHistory key={`history-${r.id}`} requestId={r.id} status={r.status} />
           </div>
 
           {/* ── RIGHT COLUMN (35%) ── */}
@@ -294,7 +273,7 @@ export default function ServiceDetailModal({
             </div>
 
             {/* Financial values */}
-            <InfoRow label="Valor estimado" value={formatCurrency(r.estimated_price)} />
+            <InfoRow label="Valor estimado" value={formatKz(r.estimated_price)} />
 
             <div className="py-2 border-b border-border">
               <label className="text-xs text-contrast block mb-1">Valor final</label>
@@ -304,7 +283,7 @@ export default function ServiceDetailModal({
                 step="0.01"
                 value={finalPriceInput}
                 onChange={(e) => setFinalPriceInput(e.target.value)}
-                placeholder="R$ 0,00"
+                placeholder="0,00 Kz"
                 className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-contrast/40"
               />
             </div>
@@ -317,20 +296,23 @@ export default function ServiceDetailModal({
                 className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
               >
                 <option value="">— Selecione —</option>
-                <option value="pix">PIX</option>
-                <option value="debit">Débito</option>
-                <option value="credit">Crédito</option>
-                <option value="cash">Dinheiro</option>
-                <option value="billing">Faturamento</option>
+                {paymentMethodInput && !PAYMENT_OPTIONS.some((o) => o.value === paymentMethodInput) && (
+                  <option value={paymentMethodInput}>{formatPaymentMethod(paymentMethodInput)}</option>
+                )}
+                {PAYMENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <button
               onClick={handleSaveFinancial}
               disabled={financialSaving}
-              className="mt-2 w-full py-1.5 rounded-lg bg-primary text-background text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50"
+              className="mt-2 w-full py-1.5 rounded-lg bg-primary text-on-primary text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50"
             >
-              {financialSaving ? "Salvando..." : "Salvar valores"}
+              {financialSaving ? "A guardar..." : "Guardar valores"}
             </button>
           </div>
         </div>

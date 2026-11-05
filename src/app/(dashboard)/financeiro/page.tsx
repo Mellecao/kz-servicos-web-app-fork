@@ -4,30 +4,12 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { fetchDebitos, updateTripFinancial, updateServiceRequestFinancial } from "@/lib/api";
 import type { Debito, PaymentMethod } from "@/types/database";
 import { useToast } from "@/components/Toast";
+import { BRAND } from "@/lib/brand";
+import { formatDate, formatKz, formatMonthShort } from "@/lib/format";
+import { PAYMENT_OPTIONS, formatPaymentMethod } from "@/lib/payment";
 
-function formatCurrency(value: number | null) {
-  if (value == null) return "—";
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
 
-function formatPaymentMethod(method: string | null) {
-  const map: Record<string, string> = {
-    pix: "PIX",
-    debit: "Débito",
-    credit: "Crédito",
-    cash: "Dinheiro",
-    billing: "Faturamento",
-  };
-  return method ? map[method] ?? method : "—";
-}
 
 // ─── Mini Bar Chart (pure SVG) ─────────────────────────────
 function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
@@ -54,7 +36,7 @@ function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
               {labels[i]}
             </text>
             <text x={x + barW / 2} y={y - 6} textAnchor="middle" className="fill-dark text-[9px] font-semibold">
-              {val > 0 ? val.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) : ""}
+              {val > 0 ? formatKz(val, { decimals: 0 }) : ""}
             </text>
           </g>
         );
@@ -188,9 +170,9 @@ function DetalheFinanceiroModal({
         await updateServiceRequestFinancial(d.id, { final_price: parsedPrice, payment_method: method });
       }
       onUpdate({ ...d, valor_final: parsedPrice, metodo_pagamento: method });
-      toast("success", "Dados financeiros salvos");
+      toast("success", "Dados financeiros guardados");
     } catch {
-      toast("danger", "Erro ao salvar dados financeiros");
+      toast("danger", "Erro ao guardar dados financeiros");
     } finally {
       setFinancialSaving(false);
     }
@@ -249,13 +231,13 @@ function DetalheFinanceiroModal({
               isPago ? "bg-accent/10 border-accent/30 text-accent" : "bg-danger/10 border-danger/30 text-danger"
             }`}>
               {isPago ? "✓ " : "✗ "}
-              {isViagem ? (isPago ? "Corrida paga" : "Corrida não paga") : (isPago ? "Serviço pago" : "Serviço não pago")}
+              {isViagem ? (isPago ? "Viagem paga" : "Viagem não paga") : (isPago ? "Serviço pago" : "Serviço não pago")}
             </span>
             {isViagem && (
               <span className={`flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full border ${
                 isMotoristaPago ? "bg-accent/10 border-accent/30 text-accent" : "bg-warning/10 border-warning/30 text-warning"
               }`}
-              style={!isMotoristaPago ? { backgroundColor: "#f59e0b10", borderColor: "#f59e0b30", color: "#f59e0b" } : undefined}
+              style={!isMotoristaPago ? { backgroundColor: `${BRAND.colors.primary}10`, borderColor: `${BRAND.colors.primary}30`, color: BRAND.colors.primary } : undefined}
               >
                 {isMotoristaPago ? "✓ " : "✗ "}
                 {isMotoristaPago ? "Motorista pago" : "Motorista não pago"}
@@ -265,7 +247,7 @@ function DetalheFinanceiroModal({
               <span className={`flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full border ${
                 isPrestadorPago ? "bg-accent/10 border-accent/30 text-accent" : ""
               }`}
-              style={!isPrestadorPago ? { backgroundColor: "#f59e0b10", borderColor: "#f59e0b30", color: "#f59e0b" } : undefined}
+              style={!isPrestadorPago ? { backgroundColor: `${BRAND.colors.primary}10`, borderColor: `${BRAND.colors.primary}30`, color: BRAND.colors.primary } : undefined}
               >
                 {isPrestadorPago ? "✓ " : "✗ "}
                 {isPrestadorPago ? "Prestador pago" : "Prestador não pago"}
@@ -277,11 +259,11 @@ function DetalheFinanceiroModal({
           <div className="bg-background rounded-lg border border-border divide-y divide-border">
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-xs text-contrast">Valor estimado</span>
-              <span className="text-xs text-dark font-medium">{formatCurrency(d.valor_estimado)}</span>
+              <span className="text-xs text-dark font-medium">{formatKz(d.valor_estimado)}</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-xs text-contrast">Valor final</span>
-              <span className="text-xs text-dark font-medium">{formatCurrency(d.valor_final)}</span>
+              <span className="text-xs text-dark font-medium">{formatKz(d.valor_final)}</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-xs text-contrast">Forma de pagamento</span>
@@ -309,8 +291,8 @@ function DetalheFinanceiroModal({
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               {isPago
-                ? (isViagem ? "Corrida paga ✓" : "Serviço pago ✓")
-                : (isViagem ? "Marcar corrida como paga" : "Marcar serviço como pago")}
+                ? (isViagem ? "Viagem paga ✓" : "Serviço pago ✓")
+                : (isViagem ? "Marcar viagem como paga" : "Marcar serviço como pago")}
             </button>
 
             {isViagem && (
@@ -358,7 +340,7 @@ function DetalheFinanceiroModal({
                   step="0.01"
                   value={finalPriceInput}
                   onChange={(e) => setFinalPriceInput(e.target.value)}
-                  placeholder="R$ 0,00"
+                  placeholder="0,00 Kz"
                   className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-contrast/40"
                 />
               </div>
@@ -370,19 +352,22 @@ function DetalheFinanceiroModal({
                   className="w-full rounded-md bg-background border border-border text-dark text-xs font-body px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                 >
                   <option value="">— Selecione —</option>
-                  <option value="pix">PIX</option>
-                  <option value="debit">Débito</option>
-                  <option value="credit">Crédito</option>
-                  <option value="cash">Dinheiro</option>
-                  <option value="billing">Faturamento</option>
+                  {paymentMethodInput && !PAYMENT_OPTIONS.some((o) => o.value === paymentMethodInput) && (
+                    <option value={paymentMethodInput}>{formatPaymentMethod(paymentMethodInput)}</option>
+                  )}
+                  {PAYMENT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <button
                 onClick={handleSaveFinancial}
                 disabled={financialSaving}
-                className="w-full py-2 rounded-lg bg-primary text-background text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full py-2 rounded-lg bg-primary text-on-primary text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50"
               >
-                {financialSaving ? "Salvando..." : "Salvar valores"}
+                {financialSaving ? "A guardar..." : "Guardar valores"}
               </button>
             </div>
           </div>
@@ -468,7 +453,7 @@ export default function FinanceiroPage() {
     const months: { label: string; total: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const label = d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+      const label = formatMonthShort(d);
       const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
       const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
       const total = pagos
@@ -514,7 +499,7 @@ export default function FinanceiroPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <StatCard
           title="Receita Total"
-          value={formatCurrency(stats.totalPago)}
+          value={formatKz(stats.totalPago)}
           subtitle={
             stats.growth >= 0
               ? `↑ ${stats.growth.toFixed(1)}% vs. mês anterior`
@@ -530,9 +515,9 @@ export default function FinanceiroPage() {
         />
         <StatCard
           title="Pendente"
-          value={formatCurrency(stats.totalPendente)}
-          subtitle={`${pendentesCount} débito${pendentesCount !== 1 ? "s" : ""} aguardando pagamento`}
-          color="#f59e0b"
+          value={formatKz(stats.totalPendente)}
+          subtitle={`${pendentesCount} débito${pendentesCount !== 1 ? "s" : ""} a aguardar pagamento`}
+          color={BRAND.colors.primary}
           icon={
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -558,7 +543,7 @@ export default function FinanceiroPage() {
           <button
             onClick={() => setTab("pendentes")}
             className={`px-4 py-1.5 rounded-md text-sm font-body transition-colors cursor-pointer ${
-              tab === "pendentes" ? "bg-primary text-background font-semibold" : "text-contrast hover:text-dark"
+              tab === "pendentes" ? "bg-primary text-on-primary font-semibold" : "text-contrast hover:text-dark"
             }`}
           >
             Pendentes ({pendentesCount})
@@ -566,7 +551,7 @@ export default function FinanceiroPage() {
           <button
             onClick={() => setTab("pagas")}
             className={`px-4 py-1.5 rounded-md text-sm font-body transition-colors cursor-pointer ${
-              tab === "pagas" ? "bg-primary text-background font-semibold" : "text-contrast hover:text-dark"
+              tab === "pagas" ? "bg-primary text-on-primary font-semibold" : "text-contrast hover:text-dark"
             }`}
           >
             Pagas ({pagasCount})
@@ -574,7 +559,7 @@ export default function FinanceiroPage() {
         </div>
         <input
           type="text"
-          placeholder="Buscar por descrição, cliente ou categoria..."
+          placeholder="Procurar por descrição, cliente ou categoria..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-80 rounded-lg bg-background border border-border text-dark placeholder:text-contrast/40 focus:ring-primary focus:ring-1 focus:outline-none px-3 py-2 text-sm font-body"
@@ -583,7 +568,7 @@ export default function FinanceiroPage() {
 
       {/* Table */}
       {loading ? (
-        <div className="text-center py-16 text-contrast text-sm">Carregando dados financeiros...</div>
+        <div className="text-center py-16 text-contrast text-sm">A carregar dados financeiros...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-contrast text-sm">
           {search ? "Nenhum resultado encontrado" : tab === "pendentes" ? "Nenhum débito pendente" : "Nenhum débito pago"}
@@ -623,7 +608,7 @@ export default function FinanceiroPage() {
                     <td className="px-4 py-3 text-contrast">{d.cliente}</td>
                     <td className="px-4 py-3 text-contrast">{d.categoria}</td>
                     <td className="px-4 py-3 text-dark text-right font-medium whitespace-nowrap">
-                      {formatCurrency(d.valor_final ?? d.valor_estimado)}
+                      {formatKz(d.valor_final ?? d.valor_estimado)}
                     </td>
                     <td className="px-4 py-3 text-contrast">{formatPaymentMethod(d.metodo_pagamento)}</td>
                     <td className="px-4 py-3">
@@ -633,8 +618,8 @@ export default function FinanceiroPage() {
                           onClick={(e) => handleQuickTogglePago(e, d)}
                           disabled={actioningId === d.id}
                           title={d.pago
-                            ? (d.tipo === "viagem" ? "Corrida paga" : "Serviço pago")
-                            : (d.tipo === "viagem" ? "Marcar corrida como paga" : "Marcar serviço como pago")}
+                            ? (d.tipo === "viagem" ? "Viagem paga" : "Serviço pago")
+                            : (d.tipo === "viagem" ? "Marcar viagem como paga" : "Marcar serviço como pago")}
                           className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 ${
                             d.pago
                               ? "bg-accent/10 border-accent/30 text-accent"
@@ -644,7 +629,7 @@ export default function FinanceiroPage() {
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
-                          {d.tipo === "viagem" ? "Corrida" : "Serviço"}
+                          {d.tipo === "viagem" ? "Viagem" : "Serviço"}
                         </button>
 
                         {/* Motorista pago toggle (trips only) */}

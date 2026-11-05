@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchUsers } from "@/lib/api";
 import type { User, UserRole } from "@/types/database";
 import NovoUsuarioForm from "@/components/forms/NovoUsuarioForm";
+import { BRAND } from "@/lib/brand";
+import { formatDate, formatPhoneAO, phoneMatches } from "@/lib/format";
 
 const roleLabels: Record<UserRole, string> = {
   client: "Cliente",
@@ -13,13 +15,10 @@ const roleLabels: Record<UserRole, string> = {
 
 const roleColors: Record<UserRole, string> = {
   client: "#2261FE",
-  provider: "#FEBF22",
+  provider: BRAND.colors.primary,
   admin: "#F8FAFC",
 };
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
 
 function getInitials(name: string): string {
   return name
@@ -57,7 +56,7 @@ export default function UsuariosPage() {
     return (
       u.full_name.toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
-      (u.phone ?? "").toLowerCase().includes(q)
+      phoneMatches(u.phone, search)
     );
   });
 
@@ -67,17 +66,17 @@ export default function UsuariosPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl md:text-3xl font-heading font-black text-dark">
-            Usuários
+            Utilizadores
           </h1>
           <p className="text-contrast text-sm mt-1">
-            Gerencie todos os usuários da plataforma
+            Faça a gestão de todos os utilizadores da plataforma
           </p>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-primary text-background px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
+          className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-heading font-bold text-sm hover:bg-primary-dark transition-colors cursor-pointer duration-200"
         >
-          + Novo Usuário
+          + Novo Utilizador
         </button>
       </div>
 
@@ -85,7 +84,7 @@ export default function UsuariosPage() {
       <div className="mb-5">
         <input
           type="text"
-          placeholder="Buscar por nome, e-mail ou telefone..."
+          placeholder="Procurar por nome, e-mail ou telefone..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full md:w-auto max-w-md px-4 py-2.5 rounded-lg border border-border bg-background text-dark placeholder:text-contrast/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
@@ -98,7 +97,7 @@ export default function UsuariosPage() {
           onClick={() => setViewMode("cards")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "cards"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -120,7 +119,7 @@ export default function UsuariosPage() {
           onClick={() => setViewMode("table")}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             viewMode === "table"
-              ? "bg-primary text-background"
+              ? "bg-primary text-on-primary"
               : "bg-surface border border-border text-dark"
           }`}
         >
@@ -143,7 +142,7 @@ export default function UsuariosPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-contrast text-sm">
-          Nenhum usuário encontrado.
+          Nenhum utilizador encontrado.
         </div>
       ) : viewMode === "cards" ? (
         <div className="flex flex-col gap-2">
@@ -152,7 +151,7 @@ export default function UsuariosPage() {
               key={user.id}
               className="bg-surface rounded-xl border border-border p-4 flex items-center gap-3 cursor-pointer hover:border-primary transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-background text-sm font-semibold flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary text-sm font-semibold flex-shrink-0">
                 {getInitials(user.full_name || user.email)}
               </div>
               <div className="flex-1 min-w-0">
@@ -205,10 +204,10 @@ export default function UsuariosPage() {
                     Tipo
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    Status
+                    Estado
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
-                    Cadastro
+                    Registo
                   </th>
                 </tr>
               </thead>
@@ -229,7 +228,7 @@ export default function UsuariosPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-contrast">{user.email}</td>
-                    <td className="px-5 py-3.5 text-sm text-contrast">{user.phone ?? "—"}</td>
+                    <td className="px-5 py-3.5 text-sm text-contrast">{formatPhoneAO(user.phone)}</td>
                     <td className="px-5 py-3.5">
                       <span
                         className="text-xs font-medium px-2.5 py-1 rounded-full"
