@@ -45,3 +45,6 @@ next-env.d.ts
 
 # brainstorm sessions
 .superpowers/
+
+# Definições locais do Claude Code (podem conter tokens)
+.claude/settings.local.json
