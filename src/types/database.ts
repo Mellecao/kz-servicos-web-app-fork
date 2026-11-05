@@ -77,6 +77,10 @@ export interface ProviderProfile {
   bio: string | null;
   /** Prestador fictício, só para a demonstração (migration service_provider_search). */
   is_demo?: boolean | null;
+  /** Faixa de preço (Kz) e tempo médio de resposta (min) do cartão do mapa. */
+  price_min?: number | null;
+  price_max?: number | null;
+  avg_response_minutes?: number | null;
   created_at: string;
   updated_at: string;
   // Relations

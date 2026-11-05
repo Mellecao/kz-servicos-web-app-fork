@@ -1,15 +1,12 @@
-import type { Trip, TripDriverCandidate } from "@/types/database";
+import type { Address, Trip, TripDriverCandidate, User } from "@/types/database";
 
-type TripSearchInput = Pick<
-  Trip,
-  | "id"
-  | "status"
-  | "scheduled_datetime"
-  | "pickup_address"
-  | "dropoff_address"
-  | "users"
-  | "driver_profiles"
->;
+// As relações só precisam dos campos que a pesquisa lê: um Trip completo continua a servir.
+type TripSearchInput = Pick<Trip, "id" | "status" | "scheduled_datetime"> & {
+  driver_profiles?: Trip["driver_profiles"] | null;
+  pickup_address?: Pick<Address, "formatted_address"> | null;
+  dropoff_address?: Pick<Address, "formatted_address"> | null;
+  users?: Pick<User, "full_name" | "email"> | null;
+};
 
 export function filterTripsBySearch<T extends TripSearchInput>(
   trips: T[],

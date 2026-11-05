@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { chunk } from "@/lib/chunk";
 import { BRAND } from "@/lib/brand";
 import { isMissingPostgrestRelationError } from "@/lib/postgrest-errors";
 import { buildDriverMetrics, getDriverMetricPeriodRange } from "@/lib/driver-metrics";
@@ -551,6 +552,9 @@ export async function markSupportMessagesRead(
 }
 
 // ─── Trip Driver Candidates ────────────────────────────────
+/** Ids de viagens por pedido ao buscar candidatos (ver fetchTripDriverCandidatesForTrips). */
+const TRIP_ID_BATCH_SIZE = 50;
+
 const tripDriverCandidateSelect =
   "*, driver_profiles(*, provider_profiles(*, users(*)))";
 
@@ -571,13 +575,22 @@ export async function fetchTripDriverCandidatesForTrips(
 ): Promise<TripDriverCandidate[]> {
   if (tripIds.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from("trip_driver_candidates")
-    .select(tripDriverCandidateSelect)
-    .in("trip_id", tripIds)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as TripDriverCandidate[];
+  // Os ids vão no URL: com centenas de viagens um só `.in()` falha (URL longo demais) e o
+  // PostgREST também corta as respostas a 1000 linhas. Por isso, lotes pequenos em paralelo.
+  const batches = await Promise.all(
+    chunk(tripIds, TRIP_ID_BATCH_SIZE).map(async (ids) => {
+      const { data, error } = await supabase
+        .from("trip_driver_candidates")
+        .select(tripDriverCandidateSelect)
+        .in("trip_id", ids)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as TripDriverCandidate[];
+    }),
+  );
+  return batches
+    .flat()
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
 export async function addTripDriverCandidate(

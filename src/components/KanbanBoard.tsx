@@ -410,7 +410,7 @@ export default function KanbanBoard({
 
   return (
     <DndContext
-      sensors={isDesktop ? sensors : []}
+      sensors={sensors}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
