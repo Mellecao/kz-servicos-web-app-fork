@@ -1,0 +1,85 @@
+# STATUS — Reativação Só Serviços (handoff para outra conta/sessão)
+
+Atualizado: 2026-11-05 · Orquestradora: `tellin-52`. Documento vivo; **sem segredos** (chaves estão em `.env.local` do painel e nas mensagens originais do utilizador).
+Contrato completo: `docs/superpowers/specs/2026-11-05-so-servicos-reativacao-design.md` (ler primeiro).
+
+## Decisões do utilizador
+- Prosseguir com o plano de 5 fases (fundação → marca → Angola → produtos → serviços).
+- **Nunca apagar nada do banco** (325 users/632 viagens de teste ficam).
+- Quando o utilizador avisar que os tokens estão a acabar: **pedir a cada sessão um resumo de tudo** e consolidar aqui para outra conta assumir.
+- Commits/push: NÃO autorizados até hoje (tudo na working tree). Perguntar uma vez, no fim.
+
+## Feito (verificado)
+- [x] Recon: 3 apps, Supabase `mtsqeomctrqfyekyzapc` ativo; chaves Supabase e Maps validadas (REST 200; Geocoding/Places OK em Angola).
+- [x] Pacote de marca gerado em `public/brand/` (laranja `#FF9A52`, rosa `#E54C65`; logos claro/escuro, ícones, favicons, splash).
+- [x] Migration `20261105120000_products_module.sql` aplicada (8 produtos, RPCs `create_product_order`/`cancel_product_order`, RLS, realtime, taxa 1000 Kz). Acentos corrigidos (curl.exe corrompia UTF-8 → usar `curl --data-binary @ficheiro`).
+- [x] 3 utilizadores de teste criados e **login real verificado**: `miguelm@cliente.com`, `miguelm@admin.com`, `miguelm@prestador.com` (pw `<palavra-passe de teste: pedir ao utilizador>`; prestador = `provider` aprovado, NÃO motorista; cats: Eletricista/Canalizador/Ar condicionado).
+- [x] `.env.local` do painel criado (ignorado pelo git).
+- [x] 47 migrations em falta exportadas do histórico remoto para `supabase/migrations/` (JWT service_role **redigido** em 6 ocorrências; varredura de segredos limpa).
+- [x] Toolchain: Flutter 3.41.6 em `C:\Users\v27me\flutter` (fora do PATH), JDK 21 em `C:\Users\v27me\.jdks\jdk-21.0.12.1+1`, emulador `emulator-5554` ativo.
+
+- [x] Migrations `20261105130000_pt_ao_server_texts` e `20261105131000_pt_ao_brand_in_server_texts` aplicadas: mensagens de 22 funções (RPC/notificações a admins) em pt-AO e marca "KZ" → "Só Serviços". Verificado por re-scan (0 resíduos); nenhum app compara essas mensagens como texto. 1.107 notificações históricas com "KZ" ficaram como estão (dados de teste).
+- [x] Migration `20261105132000_luanda_regions` aplicada: 8 regiões de Luanda em `driver_regions` (Campinas/Sao Paulo mantidas).
+- [x] `tellin-a5` fechou F1 (baseline Prestador): analyze limpo; `flutter test` +147 −5 (5 testes desatualizados por textos "KZ" já removidos do código; ela alinha na F2/F3).
+
+- [x] `tellin-18` fechou F1+F2 (Painel): build exit 0; lint = baseline (8 erros herdados `react-hooks/*`, 4 avisos — não são nossos); login admin e `sb_secret` como service role verificados com supabase-js; primária `#FF9A52`, texto sobre ela `#1F2430`, constantes em `src/lib/brand.ts`, 33 amarelos trocados, logo antigo removido. Bug meu corrigido: favicons de `public/brand` eram PNG sem alfa e o Turbopack recusa → agora RGBA.
+
+- [x] **Backend de produtos validado ponta-a-ponta: 23/23** (script `e2e_products.mjs` com contas de teste: anónimo/admin/cliente barrados onde devem; totais e preços calculados no servidor, preço adulterado ignorado; notificações a admin e cliente; ciclo completo de estados com datas; cancelamento só em `pending`; catálogo só editável por admin). Pedidos de teste deixados no banco (sem apagar): `e11769df-…` cancelado e `31fecbc4-…` entregue.
+- [x] Autorização do utilizador (2026-11-05, no chat da orquestradora): uso das contas de teste (senha `<palavra-passe de teste: pedir ao utilizador>`) para login real nos 3 apps, retransmitida às 3 sessões.
+
+- [x] `tellin-18` fechou **F2+F3 (Painel: marca + Angola)**: `npm test` 39/39 (TDD em `format.ts`/`payment.ts`), build exit 0 (21 rotas), lint = baseline (8 erros herdados, 3 avisos). `src/lib/format.ts` único (Kz, datas Africa/Luanda, +244, BI/NIF), Places só Angola testado na API real, vocabulário pt-AO em 30 ficheiros, 0 resíduos de `R$/pt-BR/KZ/corrida/pix/CPF`. Decisão minha: telefone **gravado em E.164 sem espaços**, mostrado com máscara (vale para os 3 apps). Pendente dela: F4 (pedidos de produtos + catálogo) e ver ecrãs autenticados no browser (autorização do utilizador já retransmitida).
+
+## Em curso (retomado 2026-11-05 pela conta claude3, orquestradora `tellin-f2`)
+Sessões antigas (`tellin-52/da/a5/18`) já não existem; trabalho redistribuído:
+- `tellin-d1` → Cliente (`C:\Projetos\kz-servicos-app-cliente`): **módulo de produtos (F4)** — ainda não existe `lib/features/products`; F2/F3 estão na working tree.
+- `tellin-97` → Prestador (`C:\Projetos\kz-servicos-app-prestador`): auditar/fechar F2+F3, alinhar 5 testes, F5 lado prestador.
+- `tellin-8e` → Painel (este worktree): confirmar F4 (páginas `pedidos-produtos` e `produtos` já existem; `npm test` 68/68, `tsc` limpo — verificado por `tellin-f2`), validar ecrãs no browser, F5 lado painel.
+- `tellin-f2` (eu): banco/SQL, skill `kz-database`, e2e de serviços, STATUS.
+
+### Marcos desta retomada (tellin-f2)
+- [x] Migration `20261105140000_product_delivery_fee_client_read` aplicada e registada (cliente lê só `product_delivery_fee`; verificado com login real).
+- [x] `tellin-8e` fechou **F4 Painel** (tsc 0, `npm test` 75/75, build 0, lint 7 erros herdados) e parte da F5: board de serviços com 10 colunas, validações de arrasto, prestador no detalhe, "Em curso".
+- Achado F5: **nenhum app convida/escolhe prestadores** (só o Prestador lê os convites) → UI de aprovar/rejeitar/convidar/escolher no painel encomendada à `tellin-8e`.
+- Verificado no banco: nenhuma função viva contém "KZ". Mudanças de estado de serviços só geram push FCM (Firebase antigo), sem notificação in-app, e os apps móveis não leem `notifications` → nota para o utilizador.
+- [x] Migration `20261105141000_reject_service_request` aplicada (RPC admin: under_review→review_rejected, motivo em `service_request_status_history.observations`; testada: cliente barrado, admin ok).
+- **Fluxo de serviços canónico (decidido):** cliente cria (`open`) → admin aprova (`searching_provider`) e convida no painel → prestador "Propõe preço" (UPDATE do seu candidate: `offered_price`+`accepted`) ou recusa → admin escolhe via `select_service_request_provider` (`awaiting_client_confirmation`, `final_price`) → cliente aceita (`assigned`; trigger converte em `awaiting_provider_confirmation`) → prestador confirma (`assigned`) → inicia (`in_progress`) → conclui (`finished`). Avaliação fora de âmbito. Prestador: retirar lista de `open` (inalcançável por RLS) e corrigir falso sucesso (UPDATE com 0 linhas). Cliente: estados reais pt-AO + aceitar proposta.
+- Produtos no Cliente: realtime de estado validado ao vivo (`confirmed` apareceu sozinho). Emulador a 92% de espaço: risco para instalações.
+- [x] Migration `20261105142000_candidates_provider_column_guard`: trigger que impede o prestador de alterar `admin_approved`, `kz_*`, `price_rejection_*`, `service_request_id`, `provider_profile_id` no próprio convite (continua a poder `status`, `offered_price`, `responded_at`, `observations`). Testado: prestador barrado em `admin_approved`, ok em `observations`; admin ok.
+- [x] Skill `kz-database` regenerada a partir do banco real em `.github/skills/kz-database/` (39 tabelas, 17 enums, 114 políticas, 41 triggers, 30 RPCs; 0 segredos). **Atenção para a entrega:** esse caminho é um submódulo git não inicializado (`.gitmodules` aponta para o repo antigo `kz-database-skill`; gitlink 160000 no índice) → o git não vê os ficheiros novos. Decisão para quando houver autorização de commits: substituir o submódulo por pasta normal (remover gitlink + entrada do `.gitmodules` + `git add`) ou mover a skill e atualizar o `@import` do `CLAUDE.md`.
+- [x] Migration `20261105143000_invited_provider_can_read_request`: prestador convidado passa a ler o pedido do convite (verificado com login real).
+- [x] `tellin-97` fechou Prestador (F2/F3 + fluxo canónico): `flutter analyze` limpo, `flutter test` +227; transições testadas no banco real: propor → escolher → aceitar cliente → confirmar → em curso → finalizado, todas passam.
+- [x] `tellin-d1` fechou o Cliente: produtos (46 testes, realtime validado no emulador), serviços (10 estados reais pt-AO, mocks removidos, Aceitar/Cancelar/chat/realtime), ~150 textos pt-AO, 4 testes herdados corrigidos. `flutter analyze` 23 avisos / 0 erros (baseline 24 com 1 erro), `flutter test` +417 / 0 falhas (baseline +330 −4). Percurso de serviços ponta a ponta validado no emulador com o pedido `540c6aa9` (aceitar → awaiting_provider → assigned → in_progress → finished em tempo real; chat abre).
+- [x] Migration `20261105144000_provider_can_read_request_photos` aplicada (prestador convidado lê as fotos do pedido). Fotos do pedido: uma linha de teste falsa (`…/teste/candeeiro.jpg`, 400) ficou no banco, ignorar.
+- Convenção descoberta: o app Cliente grava a morada do serviço em `service_requests.observations` (sem `address_id`); Painel e Prestador já tratam isso (`serviceAddress()`); formulário do admin passou a seguir o mesmo.
+- Clube de benefícios (Prestador): escondido por flag (`benefitsClubEnabled=false`); a tabela `benefit_partners` nunca existiu.
+- [x] **E2E de serviços 39/39 OK** (`tellin-8e`, pedidos novos, 3 contas, nada apagado): criar com morada+foto → iniciar análise → aprovar → convidar → propor preço → escolher → cliente aceita → prestador confirma → em curso → finalizado; negativos OK (rejeitar com motivo, recusar convite, prestador barrado ao mudar `admin_approved`/`kz_proposed_price`, RLS entre clientes). Painel passou a mostrar fotos e histórico do serviço. Painel final: `tsc` 0, `npm test` 96/96 (reverificado por `tellin-f2`), build 0, lint baseline.
+- Nota de desenho: `select_service_request_provider` sobrescreve `offered_price` com o preço escolhido (perde a proposta original). Aceite para a demo; se importar guardar o histórico, é mudança na RPC.
+- **Segurança na entrega:** `.claude/settings.local.json` está VERSIONADO no git (commits antigos) e contém tokens de sessão JWT já expirados (jun/2026, sem papel de service). Remover do índice e do histórico antes de entregar o repositório.
+- [x] Validação visual final no emulador (Cliente, release x64 via `adb install -r`, sessão preservada): cancelar produto pela UI (motivo mostrado, sem crash), cancelar serviço `open` pela UI, textos do chat ("Chat do serviço", "Escreva uma mensagem…", "Estou a chegar", "Vou atrasar-me"). Emulador ~90% cheio (só cabe release).
+- [x] `tellin-8e` fechou a UI do fluxo no Painel (`ServiceFlowPanel`: aprovar/rejeitar/convidar/escolher; `npm test` 83/83, build 0, lint baseline). Não existe tabela `service_request_proposals`: as propostas são colunas de `service_request_provider_candidates`.
+- Token Supabase `sbp_…` foi colado no chat pelo utilizador (usado só via variável de ambiente) → incluir na rotação.
+
+### Notas das sessões antigas (registadas por `tellin-52`, orquestradora anterior, 2026-11-05 ~17h)
+As sessões antigas `tellin-da/a5/18` **continuam vivas mas foram mandadas parar** (só leitura) para não colidirem com `d1/97/8e`. `tellin-f2` não é alcançável a partir da conta original — coordenar via utilizador. O que deixaram:
+- **Prestador (a5):** ficheiro novo `test/core/constants/angola_guard_test.dart`, **VERMELHO de propósito**, que lista restos de pt-BR — `97` decide: corrigir os restos e manter o teste, ou apagá-lo. Restos: `trip_data.dart:229` "Em andamento"; `benefits_service.dart:55/67/79` e `mock_provider.dart:68/95` com telefones "(11)…"; "Enviando foto/solicitação" (`profile_page:457/475`, `active_trip_panels:193/588/645`); `flash_awaiting_client_page:89` "aguardando cliente"; 1 falso positivo (`home_page:124`, debugPrint). Última medição dela antes das edições do outro escritor: analyze limpo, `flutter test` 230 verdes.
+- **Cliente (da):** mantidos de propósito as cores semânticas âmbar/laranja de categoria/estado (`F9A825`, `EF6C00`), os logs "[KZ]" e o id de canal push `kz_trip_channel` (identificador). Sobras: `assets/brand/` com cópias não usadas (splash, favicons, `brand.json`); 2 planos em `docs/superpowers/plans/`. `LoginBottomSheet`/`RegisterBottomSheet` são código morto. `supabase/functions/send-trip-notification/index.ts:39` diz "KZ Serviços" mas **essa função não está deployada** (deployadas: `send-fcm-push`, `send-admin-onesignal-push`) — texto morto. Resto pt-BR: `mock_message.dart:89` "Estamos buscando um motorista.".
+- ✅ **Resolvido (Cliente) — `git restore` da `da`:** correu `dart format` por engano e desfez com `git restore` em `lib/core/widgets/{dust_particles,liquid_glass_card,mesh_gradient_background}.dart`. Verificado por `tellin-52` (leitura): os 3 estão **iguais ao HEAD** (sem mexida desde as 16:05), **não contêm cores amarelas fixas nem usam `AppColors`** (a cor chega por parâmetro a partir de `onboarding_page.dart`, que está intacta e modificada) e **não estavam entre os 33 `lib/` modificados** no início da sessão (lista da `da`). Conclusão: nenhum trabalho de marca nem WIP antigo poderia estar neles → sem perda. Nada a refazer.
+- **Painel (18), confirmado por ela que NÃO estavam tratadas:** (1) `KanbanListView` recebe `onMoveCard` mas nunca renderiza botão de avançar (só "Ver detalhes"); a Lista é a vista por omissão <768px → no telemóvel só se avança estado abrindo o detalhe (afeta viagens, outros-serviços e pedidos-produtos); (2) `TripDetailModal` tem `handleSelectDriver` definido e não usado (aviso de lint do baseline) → confirmar se escolher motorista candidato está acessível na UI; (3) `admin_logs.entity_id` é UUID e `entity_type` tem DEFAULT 'trip': um id não-UUID falha em silêncio (`logAdminAction` é fire-and-forget) e o log fica rotulado "trip" — `logAdminAction` em `src/lib/api.ts` agora aceita `entityType` opcional e `entityId` nulo: usar nos logs novos.
+- ⚠ **Worktree do Painel misturado:** as fases 2–4 da `tellin-18` (37 ficheiros) e as edições da `tellin-8e` (16:37–16:52: service-requests, ServiceFlowPanel, ServiceDetailModal, Toast, api.ts, TripDetailModal…) estão **todas por commitar neste mesmo worktree**. Conferido por leitura: os ficheiros da 18 estão intactos, sem duplicados nem colisão visível. **Quem fizer o commit deve rever o diff completo** — mistura o trabalho de duas sessões. A 18 nunca verificou RLS/realtime/ecrãs autenticados do painel (a autorização do utilizador foi dada no chat da orquestradora; a 18 exige recebê-la no seu próprio terminal) — `tellin-8e` declara ter validado no browser.
+
+## Pendente (minha responsabilidade — orquestradora)
+- [x] ~~Renomear categorias~~ **FEITO** (migration `20261105133000_pt_ao_service_categories`, 16 categorias antes e depois, slugs intactos) depois de a `tellin-a5` confirmar que o Prestador aceita os nomes novos (12/12 testes de categorias verdes, antigos mantidos como alias).
+- [ ] Regenerar a skill `kz-database` (`.github/skills/kz-database/` não existe neste worktree, mas o `CLAUDE.md` importa-a) a partir do banco real.
+- [ ] Fase 5: e2e de serviços (cliente → admin → prestador → conclusão) com os 3 utilizadores.
+- [ ] Pedir ao utilizador: número real de suporte/WhatsApp (+244), autorização de commits, projeto Firebase próprio (push), rotação de chaves.
+
+## Itens em aberto para o utilizador (segurança/entrega)
+1. **Rotacionar** token de acesso Supabase (`sbp_…`) e chave secreta (`sb_secret_…`) coladas no chat.
+2. Chave legacy `service_role` embutida em triggers/migrations antigas do histórico remoto (4 migrations de push) → rotacionar JWT secret ou desativar chaves legacy antes de entregar ao comprador (e migrar os apps para a publishable key).
+3. Preços do catálogo de produtos são exemplos; Firebase/push ainda aponta para o projeto antigo.
+4. `system_settings.push_webhook_secret` existe em texto no banco (revisar antes da venda).
+5. **Imagem de pessoa real no histórico git:** `bg_login.png`, `banner.png`, `banner2.png` do Cliente traziam o "KZ" amarelo, fardas KZ e "O Akira agora tem app" (pessoa real, pt-BR) gravados. Decisão (2026-11-05): trocar por fundos desenhados em código com a logo oficial e retirar os ficheiros em uso. **Mas continuam no histórico do git** dos repos — se o código for entregue com histórico, considerar reescrever o histórico ou entregar um repositório novo (decisão do utilizador). `tellin-a5` e `tellin-18` auditam os seus repos pelo mesmo problema.
+
+## Receitas úteis
+- SQL no banco sem corromper acentos: escrever o `.sql` em ficheiro UTF-8 e enviar com `curl --data-binary @body.json` à Management API (`POST /v1/projects/<ref>/database/query`, token em variável de ambiente). Migrations registadas: `POST /v1/projects/<ref>/database/migrations {name, query}`.
+- Criar utilizador de teste: Auth Admin API `POST /auth/v1/admin/users` com `apikey: <secret key>`; o trigger `handle_new_user` cria `public.users` sempre como `client` → promover por UPDATE.
