@@ -114,6 +114,7 @@ Papel do utilizador: `get_user_role()` devolve `client`, `provider` ou `admin` (
 |---|---|---|---|---|
 | `authenticated_read_product_delivery_fee` | SELECT | authenticated | `((key)::text = 'product_delivery_fee'::text)` | — |
 | `authenticated_read_scheduled_quote_override` | SELECT | authenticated | `((key)::text = 'scheduled_quote_admin_override'::text)` | — |
+| `authenticated_read_trips_enabled` | SELECT | authenticated | `((key)::text = 'trips_enabled'::text)` | — |
 | `system_settings_admin` | ALL | authenticated | `(get_user_role() = 'admin'::user_role)` | `(get_user_role() = 'admin'::user_role)` |
 | `system_settings_select` | SELECT | authenticated | `(get_user_role() = 'admin'::user_role)` | — |
 

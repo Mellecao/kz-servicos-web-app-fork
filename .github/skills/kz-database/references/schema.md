@@ -82,11 +82,18 @@ Prestadores (inclui motoristas via driver_profiles). `status`: provider_status; 
 | `bio` | text | sim | — |  |
 | `created_at` | timestamptz | sim | `now()` |  |
 | `updated_at` | timestamptz | sim | `now()` |  |
+| `price_min` | numeric(12,2) | sim | — | Faixa de preço mostrada no cartão do mapa (Kz) |
+| `price_max` | numeric(12,2) | sim | — | Faixa de preço mostrada no cartão do mapa (Kz) |
+| `avg_response_minutes` | integer | sim | — | Tempo médio de resposta (minutos) |
+| `is_demo` | boolean | não | `false` | Prestador fictício de demonstração: `search_service_providers` simula-lhe a posição |
 
 - **PK** `provider_profiles_pkey`: (id)
 - **FK** `provider_profiles_service_category_id_fkey`: (service_category_id) REFERENCES service_categories(id) ON DELETE RESTRICT
 - **FK** `provider_profiles_user_id_fkey`: (user_id) REFERENCES users(id) ON DELETE CASCADE
 - **UNIQUE** `provider_profiles_user_id_key`: (user_id)
+- **CHECK** `provider_profiles_price_range_chk`: `price_min IS NULL OR price_max IS NULL OR price_min <= price_max`
+
+Os prestadores `is_demo = true` (75, e-mails `demo.*@demo.so-servicos.test`) são figurantes: só a conta real `miguelm@prestador.com` responde a pedidos. Nunca os apagar; o painel marca-os com o selo «Demo».
 
 ### provider_category_services
 
@@ -380,7 +387,7 @@ Notificações in-app (e base do push).
 
 ### system_settings
 
-Definições chave/valor (`value` jsonb), p.ex. `product_delivery_fee`.
+Definições chave/valor (`value` jsonb), p.ex. `product_delivery_fee`. `trips_enabled` (jsonb boolean, hoje `false`) é o interruptor das caronas: com `false` o app Cliente abre em «Buscar prestadores» e o painel esconde Viagens, Mapa e Motoristas (nada é apagado). Qualquer utilizador autenticado lê só essa chave; só o admin escreve.
 
 | Coluna | Tipo | Nulo | Default | Chave / Ref |
 |---|---|---|---|---|

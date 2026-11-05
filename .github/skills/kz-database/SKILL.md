@@ -29,8 +29,12 @@ Estados: `open → under_review → searching_provider → awaiting_client_confi
 2. Admin: «Iniciar análise» (`under_review`), depois «Aprovar» (`searching_provider`) ou «Rejeitar» com motivo (RPC `reject_service_request` → `review_rejected`; o motivo fica em `service_request_status_history.observations`).
 3. Admin convida prestadores aprovados que cobrem a categoria (insert em `service_request_provider_candidates`, `status = pending`; UNIQUE pedido+prestador). Não existe tabela `service_request_proposals`: os preços estão nos candidatos (`offered_price`, `kz_proposed_price`).
 4. Admin escolhe com a RPC `select_service_request_provider(pedido, prestador, preço)`: o pedido passa a `awaiting_client_confirmation` com `final_price`, o candidato fica `accepted` e os restantes `rejected`.
-5. Passar a `assigned` com prestador definido (vindo de `searching_provider` ou `awaiting_client_confirmation`) fica `awaiting_provider_confirmation` por trigger. Os passos de confirmação do cliente e do prestador, e o fim do fluxo, ainda estão por validar no teste ponta a ponta.
+5. Passar a `assigned` com prestador definido (vindo de `searching_provider` ou `awaiting_client_confirmation`) fica `awaiting_provider_confirmation` por trigger. O resto do fluxo (cliente aceita → prestador confirma → `in_progress` → `finished`) foi validado ponta a ponta no banco real (E2E 39/39).
 6. Cancelar rejeita os candidatos `pending`/`accepted` (trigger). Cada mudança de estado grava `service_request_status_history`.
+
+**Pedido direto (atalho do passo 1–3).** No app Cliente, «Buscar prestadores» chama `search_service_providers` (prestadores `is_demo` com posição simulada perto do cliente) e, ao tocar em «Solicitar», `client_request_service_from_provider`: cria o pedido **já em `searching_provider`** com **um só convite** (a escolha do cliente substitui a aprovação do admin). Daí segue o passo 4. O banco não deixa marca; o painel reconhece-o por `isDirectRequest` (`searching_provider` + convites + nunca passou por `under_review`). Só o prestador real `miguelm@prestador.com` responde; os `is_demo` são figurantes.
+
+**Interruptor das caronas.** `system_settings.trips_enabled` (jsonb boolean, hoje `false`). Com `false` o painel esconde Viagens, Mapa e Motoristas (`TRIPS_ONLY_PATHS` em `src/lib/trips-enabled.ts`) e o Cliente abre em «Buscar prestadores». Falha ao ler = desligado. Nada de viagens é apagado. O admin liga/desliga em `/configuracoes`.
 
 O painel barra `awaiting_*`, `assigned`, `in_progress` e `finished` sem prestador definido, porque o banco aceitaria.
 
