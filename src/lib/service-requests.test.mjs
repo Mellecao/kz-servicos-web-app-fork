@@ -13,6 +13,7 @@ import {
   validateChoicePrice,
   awaitingConfirmationNotice,
   serviceAddress,
+  isDirectRequest,
   composeServiceDescription,
   validateServiceAddress,
 } from "./service-requests.ts";
@@ -301,5 +302,53 @@ describe("pedido criado pelo admin (convenção do app Cliente)", () => {
     assert.match(validateServiceAddress(""), /morada/i);
     assert.match(validateServiceAddress("   "), /morada/i);
     assert.equal(validateServiceAddress("Talatona, Luanda"), null);
+  });
+});
+
+describe("isDirectRequest (pedido escolhido pelo cliente, sem passar pela análise)", () => {
+  const direct = (over = {}) => ({
+    status: "searching_provider",
+    candidateCount: 1,
+    history: [],
+    ...over,
+  });
+
+  test("em procura, com um convite e sem análise do admin, é direto", () => {
+    assert.equal(isDirectRequest(direct()), true);
+  });
+
+  test("o registo de criação em searching_provider não conta como análise", () => {
+    assert.equal(
+      isDirectRequest(direct({ history: [{ from_status: null, to_status: "searching_provider" }] })),
+      true
+    );
+  });
+
+  test("pedido que passou por under_review NÃO é direto, mesmo com um só convite", () => {
+    assert.equal(
+      isDirectRequest(
+        direct({
+          history: [
+            { from_status: "open", to_status: "under_review" },
+            { from_status: "under_review", to_status: "searching_provider" },
+          ],
+        })
+      ),
+      false
+    );
+  });
+
+  test("se o admin convidar mais prestadores, continua a ser direto na origem", () => {
+    assert.equal(isDirectRequest(direct({ candidateCount: 4 })), true);
+  });
+
+  test("sem convites não há escolha do cliente", () => {
+    assert.equal(isDirectRequest(direct({ candidateCount: 0 })), false);
+  });
+
+  test("fora de searching_provider o aviso não se aplica", () => {
+    for (const status of ["open", "under_review", "assigned", "in_progress", "finished", "cancelled"]) {
+      assert.equal(isDirectRequest(direct({ status })), false, status);
+    }
   });
 });

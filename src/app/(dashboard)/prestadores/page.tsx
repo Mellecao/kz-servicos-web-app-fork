@@ -6,6 +6,14 @@ import type { ProviderProfile, ProviderStatus } from "@/types/database";
 import NovoPrestadorForm from "@/components/forms/NovoPrestadorForm";
 import { BRAND } from "@/lib/brand";
 import { formatPhoneAO, phoneMatches } from "@/lib/format";
+import DemoBadge from "@/components/DemoBadge";
+import {
+  PROVIDER_ORIGIN_LABELS,
+  countByOrigin,
+  filterProvidersByOrigin,
+  isDemoProvider,
+  type ProviderOrigin,
+} from "@/lib/provider-origin";
 
 const statusLabels: Record<ProviderStatus, string> = {
   approved: "Aprovado",
@@ -36,6 +44,7 @@ export default function PrestadoresPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [origin, setOrigin] = useState<ProviderOrigin>("all");
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
@@ -53,7 +62,8 @@ export default function PrestadoresPage() {
     loadProviders();
   }, [loadProviders]);
 
-  const filtered = providers.filter((p) => {
+  const originCounts = countByOrigin(providers);
+  const filtered = filterProvidersByOrigin(providers, origin).filter((p) => {
     const name = p.users?.full_name ?? "";
     const phone = p.users?.phone ?? "";
     const q = search.toLowerCase();
@@ -104,7 +114,29 @@ export default function PrestadoresPage() {
             <option value="suspended">Suspensos</option>
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-contrast">Origem:</span>
+          <select
+            value={origin}
+            onChange={(e) => setOrigin(e.target.value as ProviderOrigin)}
+            className="px-3 py-2.5 rounded-lg border border-border bg-background text-dark text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          >
+            {(Object.keys(PROVIDER_ORIGIN_LABELS) as ProviderOrigin[]).map((key) => (
+              <option key={key} value={key}>
+                {PROVIDER_ORIGIN_LABELS[key]} ({originCounts[key]})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {origin === "all" && originCounts.demo > 0 && (
+        <p className="mb-4 text-xs text-contrast">
+          A lista inclui <strong className="text-dark">{originCounts.demo}</strong> prestadores
+          fictícios de demonstração, assinalados com <DemoBadge />. Use o filtro «Origem» para os
+          esconder.
+        </p>
+      )}
 
       {/* View toggle */}
       <div className="flex items-center gap-2 mb-4">
@@ -174,7 +206,10 @@ export default function PrestadoresPage() {
                   {getInitials(name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-dark text-sm truncate">{name}</p>
+                  <p className="flex items-center gap-2 font-semibold text-dark text-sm">
+                    <span className="truncate">{name}</span>
+                    {isDemoProvider(provider) && <DemoBadge />}
+                  </p>
                   <p className="text-muted text-xs truncate">{phone}</p>
                 </div>
                 <span
@@ -247,6 +282,7 @@ export default function PrestadoresPage() {
                           <span className="text-sm font-medium text-dark">
                             {name}
                           </span>
+                          {isDemoProvider(provider) && <DemoBadge />}
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-contrast">

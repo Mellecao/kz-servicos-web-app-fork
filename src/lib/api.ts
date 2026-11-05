@@ -1367,7 +1367,16 @@ export async function fetchProviderProfiles(): Promise<ProviderProfile[]> {
 }
 
 // ─── Dashboard Stats ───────────────────────────────────────
-export async function fetchDashboardStats() {
+/**
+ * Estatísticas do dashboard. Com `includeTrips: false` (interruptor trips_enabled desligado)
+ * não se consulta nada de viagens e todos os totais passam a ser só de serviços.
+ */
+export async function fetchDashboardStats(options: { includeTrips?: boolean } = {}) {
+  const includeTrips = options.includeTrips ?? true;
+  // Mesma forma que as consultas do Supabase usadas abaixo (.data / .count), sem tocar na rede.
+  const noRows = { data: [] as never[], count: 0, error: null };
+  const onlyIfTrips = <T>(query: T): T =>
+    includeTrips ? query : (Promise.resolve(noRows) as unknown as T);
   const now = new Date();
   const startOfThisMonth = new Date(
     now.getFullYear(),
@@ -1411,19 +1420,23 @@ export async function fetchDashboardStats() {
     recentTripsResult,
     recentServicesResult,
   ] = await Promise.all([
-    supabase
-      .from("trips")
-      .select("id, status, final_price, estimated_price, is_paid, created_at"),
+    onlyIfTrips(
+      supabase
+        .from("trips")
+        .select("id, status, final_price, estimated_price, is_paid, created_at"),
+    ),
     supabase
       .from("service_requests")
       .select(
         "id, status, final_price, estimated_price, is_paid, created_at, updated_at",
       ),
-    supabase
-      .from("trips")
-      .select("final_price, payment_date, updated_at, payment_method")
-      .eq("is_paid", true)
-      .gte("updated_at", sixMonthsAgo),
+    onlyIfTrips(
+      supabase
+        .from("trips")
+        .select("final_price, payment_date, updated_at, payment_method")
+        .eq("is_paid", true)
+        .gte("updated_at", sixMonthsAgo),
+    ),
     supabase
       .from("service_requests")
       .select("final_price, updated_at, payment_method")
@@ -1431,41 +1444,49 @@ export async function fetchDashboardStats() {
       .gte("updated_at", sixMonthsAgo),
     // Trips finalizadas (pagas ou não) nos últimos 6 meses — usado pra
     // gráfico de receita mensal (mostra receita esperada, não só efetivada).
-    supabase
-      .from("trips")
-      .select("final_price, estimated_price, updated_at")
-      .eq("status", "finished")
-      .gte("updated_at", sixMonthsAgo),
+    onlyIfTrips(
+      supabase
+        .from("trips")
+        .select("final_price, estimated_price, updated_at")
+        .eq("status", "finished")
+        .gte("updated_at", sixMonthsAgo),
+    ),
     supabase
       .from("service_requests")
       .select("final_price, estimated_price, updated_at")
       .eq("status", "finished")
       .gte("updated_at", sixMonthsAgo),
     // Motoristas com mais viagens finalizadas nos últimos 30 dias.
-    supabase
-      .from("trips")
-      .select(
-        "driver_profile_id, driver_profiles(provider_profiles(users(full_name, avatar_url)))",
-      )
-      .eq("status", "finished")
-      .gte("updated_at", thirtyDaysAgo)
-      .not("driver_profile_id", "is", null),
+    onlyIfTrips(
+      supabase
+        .from("trips")
+        .select(
+          "driver_profile_id, driver_profiles(provider_profiles(users(full_name, avatar_url)))",
+        )
+        .eq("status", "finished")
+        .gte("updated_at", thirtyDaysAgo)
+        .not("driver_profile_id", "is", null),
+    ),
     supabase.from("ratings").select("rating"),
-    supabase
-      .from("driver_profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("is_available", true),
+    onlyIfTrips(
+      supabase
+        .from("driver_profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("is_available", true),
+    ),
     supabase
       .from("provider_profiles")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending"),
-    supabase
-      .from("trips")
-      .select(
-        "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(5),
+    onlyIfTrips(
+      supabase
+        .from("trips")
+        .select(
+          "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(5),
+    ),
     supabase
       .from("service_requests")
       .select(

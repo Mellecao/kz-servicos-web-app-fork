@@ -7,6 +7,8 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 import { signOut } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
+import { withoutTripsItems } from "@/lib/trips-enabled";
+import { useTripsEnabled } from "@/lib/trips-enabled-context";
 
 interface NavItem {
   href: string;
@@ -70,7 +72,7 @@ const navItems: NavItem[] = [
   },
   {
     href: "/pedidos-produtos",
-    label: "Pedidos de Produtos",
+    label: "Entregas",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -149,11 +151,22 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: "/configuracoes",
+    label: "Definições",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { userProfile, session } = useAuth();
+  const { tripsEnabled } = useTripsEnabled();
 
   const displayName = userProfile?.full_name || session?.user?.user_metadata?.full_name || "Utilizador";
   const displayEmail = userProfile?.email || session?.user?.email || "";
@@ -178,7 +191,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {withoutTripsItems(navItems, tripsEnabled).map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (

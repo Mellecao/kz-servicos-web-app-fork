@@ -176,6 +176,26 @@ export function serviceAddress(request: {
   return { address: observations, notes: null };
 }
 
+/**
+ * Pedido DIRETO: o cliente escolheu um prestador no mapa e o RPC
+ * client_request_service_from_provider criou o pedido já em `searching_provider` com
+ * esse prestador convidado, sem a aprovação inicial do admin. O banco não deixa nenhuma
+ * marca, por isso reconhece-se pelo que falta: o pedido nunca passou por `under_review`
+ * e já tem convites (o primeiro é a escolha do cliente; se o admin convidar mais, o
+ * pedido continua direto na origem).
+ */
+export function isDirectRequest(input: {
+  status: string;
+  candidateCount: number;
+  history: { to_status: string }[];
+}): boolean {
+  return (
+    input.status === "searching_provider" &&
+    input.candidateCount >= 1 &&
+    !input.history.some((change) => change.to_status === "under_review")
+  );
+}
+
 /** Junta as notas à descrição (o app Cliente também só tem descrição + morada). */
 export function composeServiceDescription(description: string, notes: string): string {
   const d = description.trim();

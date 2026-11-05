@@ -7,6 +7,7 @@ import MobilePushPermissionGuide from "@/components/MobilePushPermissionGuide";
 import RequireAuth from "@/components/RequireAuth";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/Toast";
+import { TripsEnabledProvider } from "@/lib/trips-enabled-context";
 
 export default function DashboardLayout({
   children,
@@ -16,6 +17,7 @@ export default function DashboardLayout({
   return (
     <AuthProvider>
       <ToastProvider>
+        <TripsEnabledProvider>
         <RequireAuth>
           <OneSignalInitializer />
           <AdminNotificationsButton />
@@ -29,6 +31,7 @@ export default function DashboardLayout({
             <MobileNav />
           </div>
         </RequireAuth>
+        </TripsEnabledProvider>
       </ToastProvider>
     </AuthProvider>
   );

@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { signOut } from "@/lib/api";
+import { withoutTripsItems } from "@/lib/trips-enabled";
+import { useTripsEnabled } from "@/lib/trips-enabled-context";
 
 // --- Icon components (22px, stroke-based) ---
 
@@ -68,6 +70,15 @@ function CloseIcon() {
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
+  );
+}
+
+function ConfiguracoesIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
   );
 }
 
@@ -169,7 +180,7 @@ function LogsIcon() {
 }
 
 const drawerItems = [
-  { href: "/pedidos-produtos", label: "Pedidos de Produtos", icon: <PedidosProdutosIcon /> },
+  { href: "/pedidos-produtos", label: "Entregas", icon: <PedidosProdutosIcon /> },
   { href: "/produtos", label: "Produtos", icon: <ProdutosIcon /> },
   { href: "/financeiro", label: "Financeiro", icon: <FinanceIcon /> },
   { href: "/clientes", label: "Clientes", icon: <ClientesIcon /> },
@@ -177,6 +188,7 @@ const drawerItems = [
   { href: "/prestadores", label: "Prestadores", icon: <PrestadoresIcon /> },
   { href: "/usuarios", label: "Utilizadores", icon: <UsuariosIcon /> },
   { href: "/logs", label: "Logs", icon: <LogsIcon /> },
+  { href: "/configuracoes", label: "Definições", icon: <ConfiguracoesIcon /> },
 ];
 
 // --- Main component ---
@@ -184,6 +196,7 @@ const drawerItems = [
 export default function MobileNav() {
   const pathname = usePathname();
   const { userProfile, session } = useAuth();
+  const { tripsEnabled } = useTripsEnabled();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
@@ -243,7 +256,7 @@ export default function MobileNav() {
     <>
       {/* Bottom Tab Bar */}
       <nav className="fixed bottom-0 inset-x-0 z-40 flex md:hidden h-14 bg-surface border-t border-border">
-        {tabItems.map((item) => {
+        {withoutTripsItems(tabItems, tripsEnabled).map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -301,7 +314,7 @@ export default function MobileNav() {
 
             {/* 2×2 grid of secondary nav tiles */}
             <div className="grid grid-cols-2 gap-3 mb-6">
-              {drawerItems.map((item) => {
+              {withoutTripsItems(drawerItems, tripsEnabled).map((item) => {
                 const isActive =
                   pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (

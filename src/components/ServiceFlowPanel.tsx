@@ -9,11 +9,13 @@ import {
   fetchInvitableProviders,
   fetchRejectionReason,
   fetchServiceCandidates,
+  fetchServiceStatusHistory,
   inviteProviders,
   rejectServiceRequest,
   selectServiceProvider,
   startServiceReview,
   type InvitableProvider,
+  type ServiceStatusChange,
 } from "@/lib/service-flow-api";
 import {
   type CandidateState,
@@ -22,6 +24,7 @@ import {
   awaitingConfirmationNotice,
   canChooseCandidate,
   eligibleProviders,
+  isDirectRequest,
   validateChoicePrice,
   validateRejectReason,
 } from "@/lib/service-requests";
@@ -66,6 +69,7 @@ export default function ServiceFlowPanel({ request, onChanged }: ServiceFlowPane
   const [candidates, setCandidates] = useState<ServiceCandidate[]>([]);
   const [providers, setProviders] = useState<InvitableProvider[]>([]);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [history, setHistory] = useState<ServiceStatusChange[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,11 +94,14 @@ export default function ServiceFlowPanel({ request, onChanged }: ServiceFlowPane
       fetchServiceCandidates(requestId),
       status === "searching_provider" ? fetchInvitableProviders() : Promise.resolve([]),
       status === "review_rejected" ? fetchRejectionReason(requestId) : Promise.resolve(null),
+      // O histórico só serve para reconhecer o pedido direto (enquanto se procura prestador).
+      status === "searching_provider" ? fetchServiceStatusHistory(requestId) : Promise.resolve([]),
     ])
-      .then(([cands, provs, rejection]) => {
+      .then(([cands, provs, rejection, changes]) => {
         setCandidates(cands);
         setProviders(provs);
         setRejectionReason(rejection);
+        setHistory(changes);
         setLoadError(null);
       })
       .catch((err: unknown) =>
@@ -201,6 +208,10 @@ export default function ServiceFlowPanel({ request, onChanged }: ServiceFlowPane
   }
 
   const showCandidates = candidates.length > 0;
+  // Pedido direto: o cliente escolheu o prestador no mapa (o 1.º convite) e não houve análise.
+  const direct =
+    searching && isDirectRequest({ status, candidateCount: candidates.length, history });
+  const directProviderName = candidates[0]?.provider_profiles?.users?.full_name ?? null;
   const reviewable = status === "under_review";
 
   return (
@@ -317,6 +328,20 @@ export default function ServiceFlowPanel({ request, onChanged }: ServiceFlowPane
 
       {searching && (
         <div>
+          {direct && !loading && (
+            <div className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-dark">
+              <p className="font-semibold">Pedido direto do cliente</p>
+              <p className="mt-1 leading-relaxed">
+                O cliente escolheu{" "}
+                {directProviderName ? <strong>{directProviderName}</strong> : "um prestador"} e
+                pediu-lhe o serviço diretamente, sem passar pela análise. Aguarde a proposta de
+                preço desse prestador
+                {candidates.length > 1
+                  ? " (já há " + candidates.length + " convites; o primeiro é a escolha do cliente)."
+                  : ". Pode convidar outros prestadores para comparar propostas."}
+              </p>
+            </div>
+          )}
           <p className="text-xs text-dark font-medium mb-2">Convidar prestadores</p>
           {loading ? (
             <p className="text-xs text-contrast">A carregar prestadores...</p>

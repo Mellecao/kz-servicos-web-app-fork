@@ -75,6 +75,8 @@ export interface ProviderProfile {
   average_rating: number;
   total_ratings: number;
   bio: string | null;
+  /** Prestador fictício, só para a demonstração (migration service_provider_search). */
+  is_demo?: boolean | null;
   created_at: string;
   updated_at: string;
   // Relations

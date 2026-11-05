@@ -144,7 +144,7 @@ export default function PedidosProdutosPage() {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-3xl font-heading font-black text-dark">
-            Pedidos de produtos
+            Entregas
           </h1>
           <p className="text-contrast text-sm mt-1">
             Acompanhe os pedidos de entrega ao domicílio em tempo real
@@ -178,7 +178,7 @@ export default function PedidosProdutosPage() {
         </div>
       ) : orders.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-10 text-center">
-          <p className="text-dark font-heading font-bold">Ainda não há pedidos de produtos</p>
+          <p className="text-dark font-heading font-bold">Ainda não há entregas</p>
           <p className="text-contrast text-sm mt-1">
             Quando um cliente fizer um pedido na app, ele aparece aqui automaticamente.
           </p>

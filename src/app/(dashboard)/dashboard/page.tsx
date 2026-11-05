@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { fetchDashboardStats } from "@/lib/api";
+import { useTripsEnabled } from "@/lib/trips-enabled-context";
 import type { TripStatus, ServiceRequestStatus } from "@/types/database";
 import { SERVICE_STATUS_LABELS } from "@/lib/service-requests";
 import { BRAND } from "@/lib/brand";
@@ -355,13 +356,15 @@ function FunnelBar({
 
 // ─── Main Page ─────────────────────────────────────────────
 export default function DashboardPage() {
+  const { tripsEnabled, loading: tripsLoading } = useTripsEnabled();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDashboardStats()
+    if (tripsLoading) return; // espera saber se as viagens estão ligadas
+    fetchDashboardStats({ includeTrips: tripsEnabled })
       .then((d) => {
         setData(d as unknown as DashboardData);
         requestAnimationFrame(() => setTimeout(() => setLoaded(true), 40));
@@ -371,7 +374,7 @@ export default function DashboardPage() {
         setError("Erro ao carregar dados. Verifique o console para detalhes.");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [tripsEnabled, tripsLoading]);
 
   // Animated KPI values
   const revenue = useCountUp(data?.revenueThisMonth ?? 0, 1000);
@@ -383,22 +386,26 @@ export default function DashboardPage() {
   // Alerts (only show non-zero)
   const alerts = data
     ? [
-        {
-          label: "A aguardar confirmação do cliente",
-          count: data.alertAwaitingClient,
-          href: "/viagens",
-          color: "#f97316",
-        },
-        {
-          label: "A aguardar validação do motorista",
-          count: data.alertAwaitingDriver,
-          href: "/viagens",
-          color: BRAND.colors.primary,
-        },
+        ...(tripsEnabled
+          ? [
+              {
+                label: "A aguardar confirmação do cliente",
+                count: data.alertAwaitingClient,
+                href: "/viagens",
+                color: "#f97316",
+              },
+              {
+                label: "A aguardar validação do motorista",
+                count: data.alertAwaitingDriver,
+                href: "/viagens",
+                color: BRAND.colors.primary,
+              },
+            ]
+          : []),
         {
           label: "Itens sob análise",
           count: data.alertUnderReview,
-          href: "/viagens",
+          href: tripsEnabled ? "/viagens" : "/outros-servicos",
           color: "#94A3B8",
         },
         {
@@ -636,7 +643,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Monthly revenue bar chart */}
         <div
-          className="md:col-span-2 bg-surface rounded-xl border border-border p-5"
+          className={`${tripsEnabled ? "md:col-span-2" : "md:col-span-3"} bg-surface rounded-xl border border-border p-5`}
           style={{
             opacity: loaded ? 1 : 0,
             transform: loaded ? "translateY(0)" : "translateY(10px)",
@@ -648,10 +655,12 @@ export default function DashboardPage() {
               Receita Mensal
             </h2>
             <div className="flex items-center gap-4 text-xs text-contrast">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-sm bg-[#2261FE] inline-block" />
-                Viagens
-              </span>
+              {tripsEnabled && (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-sm bg-[#2261FE] inline-block" />
+                  Viagens
+                </span>
+              )}
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-sm bg-primary inline-block" />
                 Serviços
@@ -666,6 +675,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Top drivers (últimos 30 dias) */}
+        {tripsEnabled && (
         <div
           className="bg-surface rounded-xl border border-border p-5"
           style={{
@@ -736,11 +746,13 @@ export default function DashboardPage() {
             </ol>
           )}
         </div>
+        )}
       </div>
 
       {/* ── Zone 3: Funnels ─────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className={`grid grid-cols-1 ${tripsEnabled ? "md:grid-cols-2" : ""} gap-3`}>
         {/* Trip distribution */}
+        {tripsEnabled && (
         <div
           className="bg-surface rounded-xl border border-border p-5"
           style={{
@@ -788,6 +800,7 @@ export default function DashboardPage() {
           )}
         </div>
 
+        )}
         {/* Service distribution */}
         <div
           className="bg-surface rounded-xl border border-border p-5"
