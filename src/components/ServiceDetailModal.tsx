@@ -202,7 +202,14 @@ export default function ServiceDetailModal({
               }
             />
             <InfoRow label="Cliente" value={r.users?.full_name ?? "—"} />
-            <InfoRow label="Categoria" value={r.service_categories?.name ?? "—"} />
+            {r.freeform_profession ? (
+              <InfoRow
+                label="Profissional pedido"
+                value={<span className="font-semibold">👤 {r.freeform_profession}</span>}
+              />
+            ) : (
+              <InfoRow label="Categoria" value={r.service_categories?.name ?? "—"} />
+            )}
             <InfoRow label="Data do serviço" value={formatDateTime(r.service_date)} />
 
             {address && <InfoRow label="Morada" value={address} />}

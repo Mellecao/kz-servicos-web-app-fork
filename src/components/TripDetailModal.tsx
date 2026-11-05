@@ -5,27 +5,49 @@ import type {
   Trip,
   TripDriverCandidate,
   TripDriverCandidateStatus,
+  TripCancellationRequest,
   TripStatusHistory,
   DriverProfile,
+  DriverTripHistoryEntry,
 } from "@/types/database";
 import {
   fetchTripById,
   fetchTripStatusHistory,
   fetchTripDriverCandidates,
   fetchDriverProfiles,
+  updateTripStatus,
   approveTrip,
   rejectTrip,
   cancelTrip,
+  fetchPendingCancellationRequest,
+  approveCancellationRequest,
+  rejectCancellationRequest,
+  deleteTrip,
   addTripDriverCandidate,
+  addAllApprovedTripCandidates,
+  fetchNearbyTripDrivers,
   removeTripDriverCandidate,
   updateTripDriverCandidateStatus,
+  updateTripDriverCandidatePrice,
+  rejectTripDriverCandidatePrice,
+  sendKzDriverProposal,
   updateTripFinancial,
   selectTripDriver,
   approveDriverCandidate,
   resendDriverConfirmationNotification,
+  fetchDriverTripHistory,
 } from "@/lib/api";
+import {
+  getClientConfirmationBlockReason,
+  getTripStatusActions,
+  isFlashTrip,
+  isChooseDriverTrip,
+} from "@/lib/trip-status";
+import { FlashBadge } from "@/components/FlashBadge";
+import { canAdminApproveForClient } from "@/lib/trip-candidate-actions";
 import { useToast } from "@/components/Toast";
 import SearchableSelect from "@/components/SearchableSelect";
+import EditTripBasicsModal from "@/components/EditTripBasicsModal";
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/lib/brand";
 import { formatDateTime, formatKz } from "@/lib/format";
@@ -70,13 +92,20 @@ const candidateStatusLabels: Record<TripDriverCandidateStatus, string> = {
   rejected: "rejeitado",
 };
 
-const candidateStatusColors: Record<TripDriverCandidateStatus, { bg: string; text: string }> = {
+const candidateStatusColors: Record<
+  TripDriverCandidateStatus,
+  { bg: string; text: string }
+> = {
   pending: { bg: `${BRAND.colors.primary}20`, text: BRAND.colors.primary },
   accepted: { bg: "#22c55e20", text: "#22c55e" },
   rejected: { bg: "#ef444420", text: "#ef4444" },
 };
 
-
+const vehicleCategoryLabels = {
+  simple: "Simples",
+  popular: "Popular",
+  luxury: "Luxo",
+} as const;
 
 function shortenAddress(addr: string | undefined | null) {
   if (!addr) return "—";
@@ -87,7 +116,9 @@ function shortenAddress(addr: string | undefined | null) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between items-start py-2 border-b border-border last:border-0">
-      <span className="text-xs text-contrast font-body shrink-0 mr-4">{label}</span>
+      <span className="text-xs text-contrast font-body shrink-0 mr-4">
+        {label}
+      </span>
       <span className="text-xs text-dark font-body text-right">{value}</span>
     </div>
   );
@@ -101,7 +132,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripDetailModalProps) {
+export default function TripDetailModal({
+  trip,
+  open,
+  onClose,
+  onUpdate,
+}: TripDetailModalProps) {
   const { toast } = useToast();
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -111,6 +147,10 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const [history, setHistory] = useState<TripStatusHistory[]>([]);
   const [candidates, setCandidates] = useState<TripDriverCandidate[]>([]);
   const [allDrivers, setAllDrivers] = useState<DriverProfile[]>([]);
+  const [pendingCancellationRequest, setPendingCancellationRequest] =
+    useState<TripCancellationRequest | null>(null);
+  const [cancellationRequestLoaded, setCancellationRequestLoaded] =
+    useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
   // Status-action state
@@ -119,14 +159,40 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   const [actioning, setActioning] = useState(false);
 
   // Delete/cancel confirmation state
-  const [deleteInput, setDeleteInput] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Driver selector state
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [addingDriver, setAddingDriver] = useState(false);
-  const [resendingDriverConfirmation, setResendingDriverConfirmation] = useState(false);
-
+  const [addingAllDrivers, setAddingAllDrivers] = useState(false);
+  const [driverCategoryFilter, setDriverCategoryFilter] = useState<
+    "" | "simple" | "popular" | "luxury"
+  >("");
+  const [driverRegionFilter, setDriverRegionFilter] = useState("");
+  const [nearbyDrivers, setNearbyDrivers] = useState<
+    Array<{ driver_profile_id: string; distance_meters: number }>
+  >([]);
+  const [resendingDriverConfirmation, setResendingDriverConfirmation] =
+    useState(false);
+  const [selectingCandidateId, setSelectingCandidateId] = useState<
+    string | null
+  >(null);
+  const [candidatePriceInputs, setCandidatePriceInputs] = useState<
+    Record<string, string>
+  >({});
+  const [driverHistoryName, setDriverHistoryName] = useState<string | null>(
+    null,
+  );
+  const [driverHistory, setDriverHistory] = useState<DriverTripHistoryEntry[]>(
+    [],
+  );
+  const [driverHistoryLoading, setDriverHistoryLoading] = useState(false);
+  const [showClientPhonePopup, setShowClientPhonePopup] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [showCancellationRejectForm, setShowCancellationRejectForm] =
+    useState(false);
+  const [cancellationRejectReason, setCancellationRejectReason] = useState("");
+  const [reviewingCancellation, setReviewingCancellation] = useState(false);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
@@ -156,34 +222,55 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   }, [open, handleClose]);
 
   // Load data whenever trip changes
-  const loadTripData = useCallback(async (tripId: string) => {
-    setLoadingData(true);
-    try {
-      const [freshTrip, hist] = await Promise.all([
-        fetchTripById(tripId),
-        fetchTripStatusHistory(tripId),
-      ]);
-      setLiveTrip(freshTrip);
-      setHistory(hist);
-
-      // Tabela pode não existir ainda se a migration não foi aplicada
+  const loadTripData = useCallback(
+    async (tripId: string) => {
+      setLoadingData(true);
       try {
-        const cands = await fetchTripDriverCandidates(tripId);
-        setCandidates(cands);
-      } catch {
-        setCandidates([]);
-      }
+        const [freshTrip, hist] = await Promise.all([
+          fetchTripById(tripId),
+          fetchTripStatusHistory(tripId),
+        ]);
+        setLiveTrip(freshTrip);
+        setHistory(hist);
 
-      if (freshTrip.status === "searching_drivers") {
-        const drivers = await fetchDriverProfiles();
-        setAllDrivers(drivers);
+        try {
+          const cancellationRequest =
+            await fetchPendingCancellationRequest(tripId);
+          setPendingCancellationRequest(cancellationRequest);
+          setCancellationRequestLoaded(true);
+          if (!cancellationRequest) {
+            setShowCancellationRejectForm(false);
+            setCancellationRejectReason("");
+          }
+        } catch {
+          setPendingCancellationRequest(null);
+          setCancellationRequestLoaded(false);
+          toast(
+            "warning",
+            "Não foi possível verificar pedidos de cancelamento",
+          );
+        }
+
+        // Tabela pode não existir ainda se a migration não foi aplicada
+        try {
+          const cands = await fetchTripDriverCandidates(tripId);
+          setCandidates(cands);
+        } catch {
+          setCandidates([]);
+        }
+
+        if (freshTrip.status === "searching_drivers") {
+          const drivers = await fetchDriverProfiles();
+          setAllDrivers(drivers);
+        }
+      } catch {
+        toast("danger", "Erro ao carregar detalhes da viagem");
+      } finally {
+        setLoadingData(false);
       }
-    } catch {
-      toast("danger", "Erro ao carregar detalhes da viagem");
-    } finally {
-      setLoadingData(false);
-    }
-  }, [toast]);
+    },
+    [toast],
+  );
 
   useEffect(() => {
     if (!open || !trip) return;
@@ -191,13 +278,37 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     setHistory([]);
     setCandidates([]);
     setAllDrivers([]);
+    setPendingCancellationRequest(null);
+    setCancellationRequestLoaded(false);
     setShowRejectForm(false);
     setRejectReason("");
     setShowDeleteConfirm(false);
-    setDeleteInput("");
     setSelectedDriverId("");
+    setSelectingCandidateId(null);
+    setCandidatePriceInputs({});
+    setDriverHistoryName(null);
+    setDriverHistory([]);
+    setShowClientPhonePopup(false);
+    setShowCancellationRejectForm(false);
+    setCancellationRejectReason("");
+    setReviewingCancellation(false);
     loadTripData(trip.id);
   }, [open, trip, loadTripData]);
+
+  useEffect(() => {
+    setCandidatePriceInputs((prev) => {
+      const next = { ...prev };
+      for (const candidate of candidates) {
+        if (next[candidate.id] === undefined) {
+          next[candidate.id] =
+            candidate.offered_price == null
+              ? ""
+              : String(candidate.offered_price);
+        }
+      }
+      return next;
+    });
+  }, [candidates]);
 
   // Realtime subscription: atualiza candidatos quando motorista aceita/coloca preço
   useEffect(() => {
@@ -213,8 +324,10 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
           filter: `trip_id=eq.${trip.id}`,
         },
         () => {
-          fetchTripDriverCandidates(trip.id).then(setCandidates).catch(() => {});
-        }
+          fetchTripDriverCandidates(trip.id)
+            .then(setCandidates)
+            .catch(() => {});
+        },
       )
       .subscribe();
     return () => {
@@ -222,29 +335,150 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     };
   }, [open, trip]);
 
+  // Realtime subscription: mantém a viagem e o pedido de cancelamento sincronizados.
+  useEffect(() => {
+    if (!open || !trip) return;
+    const channel = supabase
+      .channel(`trip-detail-${trip.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trips",
+          filter: `id=eq.${trip.id}`,
+        },
+        () => {
+          loadTripData(trip.id).catch(() => {});
+          onUpdate();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_cancellation_requests",
+          filter: `trip_id=eq.${trip.id}`,
+        },
+        () => {
+          loadTripData(trip.id).catch(() => {});
+          onUpdate();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, trip, loadTripData, onUpdate]);
+
   // When status changes to searching_drivers, load drivers
   useEffect(() => {
     if (liveTrip?.status === "searching_drivers" && allDrivers.length === 0) {
-      fetchDriverProfiles().then(setAllDrivers).catch(() => {});
+      fetchDriverProfiles()
+        .then(setAllDrivers)
+        .catch(() => {});
     }
   }, [liveTrip?.status, allDrivers.length]);
+
+  useEffect(() => {
+    if (liveTrip?.status !== "searching_drivers") {
+      setNearbyDrivers([]);
+      return;
+    }
+    fetchNearbyTripDrivers(liveTrip.id).then(setNearbyDrivers).catch(() => {});
+  }, [liveTrip?.id, liveTrip?.status]);
 
   if (!open || !liveTrip) return null;
 
   const t = liveTrip;
   const route = `${shortenAddress(t.pickup_address?.formatted_address)} → ${shortenAddress(t.dropoff_address?.formatted_address)}`;
   const passengerName = t.users?.full_name ?? "—";
+  const passengerPhone = t.users?.phone ?? "";
+  const passengerPhoneDigits = passengerPhone.replace(/\D/g, "");
+  const passengerWhatsappNumber =
+    passengerPhoneDigits.length >= 10
+      ? passengerPhoneDigits.startsWith("55")
+        ? passengerPhoneDigits
+        : `55${passengerPhoneDigits}`
+      : "";
+  const orderedStops = [...(t.trip_stops ?? [])].sort(
+    (a, b) => a.stop_order - b.stop_order,
+  );
 
-  const statusColor = statusColors[t.status] ?? { bg: `${BRAND.colors.primary}20`, text: BRAND.colors.primary };
+  const statusColor = statusColors[t.status] ?? {
+    bg: `${BRAND.colors.primary}20`,
+    text: BRAND.colors.primary,
+  };
+  const isFlash = isFlashTrip(t);
+  const isScheduledChooseDriver = isChooseDriverTrip(t);
+  const isAdminReadOnly = isFlash || isScheduledChooseDriver;
+  const forwardActions = isAdminReadOnly
+    ? []
+    : getTripStatusActions(t.status).filter(
+        (action) => action.direction === "forward",
+      );
+  const visibleForwardActions =
+    t.status === "awaiting_driver_confirmation" ? [] : forwardActions;
+  const rollbackActions = isAdminReadOnly
+    ? []
+    : getTripStatusActions(t.status).filter(
+        (action) => action.direction === "back",
+      );
 
   // Drivers not yet added as candidates
-  const candidateDriverIds = new Set(candidates.map((c) => c.driver_profile_id));
+  const candidateDriverIds = new Set(
+    candidates.map((c) => c.driver_profile_id),
+  );
+  const regionOptions = Array.from(
+    new Map(
+      allDrivers.flatMap((driver) =>
+        (driver.driver_profile_regions ?? [])
+          .map((item) => item.driver_regions)
+          .filter((region): region is NonNullable<typeof region> => Boolean(region))
+          .map((region) => [region.id, region] as const),
+      ),
+    ).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
   const availableDrivers = allDrivers
-    .filter((d) => !candidateDriverIds.has(d.id))
+    .filter((d) => {
+      if (candidateDriverIds.has(d.id)) return false;
+      const activeVehicle = d.vehicles?.find((vehicle) => vehicle.is_active) ?? d.vehicles?.[0];
+      if (driverCategoryFilter && activeVehicle?.category !== driverCategoryFilter) return false;
+      if (driverRegionFilter && !(d.driver_profile_regions ?? []).some((item) => item.region_id === driverRegionFilter)) return false;
+      return true;
+    })
     .map((d) => ({
       value: d.id,
       label: d.provider_profiles?.users?.full_name ?? d.id,
     }));
+
+  const nearbyAvailableDrivers = nearbyDrivers
+    .filter((nearby) => !candidateDriverIds.has(nearby.driver_profile_id))
+    .map((nearby) => ({
+      ...nearby,
+      driver: allDrivers.find((driver) => driver.id === nearby.driver_profile_id),
+    }))
+    .filter((entry) => entry.driver);
+
+  async function handleAddAllDrivers() {
+    if (!t || addingAllDrivers) return;
+    const confirmed = window.confirm(
+      "Enviar esta viagem para todos os motoristas aprovados? Motoristas já candidatos não receberão convite duplicado.",
+    );
+    if (!confirmed) return;
+    setAddingAllDrivers(true);
+    try {
+      const count = await addAllApprovedTripCandidates(t.id);
+      toast("success", count ? `${count} motoristas adicionados` : "Todos os motoristas aprovados já são candidatos");
+      await loadTripData(t.id);
+      onUpdate();
+    } catch {
+      toast("danger", "Não foi possível enviar para todos os motoristas");
+    } finally {
+      setAddingAllDrivers(false);
+    }
+  }
 
   async function handleApprove() {
     if (!t) return;
@@ -279,7 +513,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   }
 
   async function handleCancel() {
-    if (!t || deleteInput !== "confirmar") return;
+    if (!t) return;
     setActioning(true);
     try {
       await cancelTrip(t.id);
@@ -288,6 +522,92 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       handleClose();
     } catch {
       toast("danger", "Erro ao cancelar viagem");
+    } finally {
+      setActioning(false);
+    }
+  }
+
+  async function handleApproveCancellationRequest() {
+    if (!pendingCancellationRequest) return;
+    const confirmed = window.confirm(
+      "Aprovar o pedido e cancelar esta viagem agora?",
+    );
+    if (!confirmed) return;
+
+    setReviewingCancellation(true);
+    try {
+      await approveCancellationRequest(pendingCancellationRequest.id);
+      toast("success", "Cancelamento aprovado e viagem cancelada");
+      onUpdate();
+      await loadTripData(t.id);
+    } catch {
+      toast("danger", "Não foi possível aprovar o cancelamento");
+      await loadTripData(t.id);
+    } finally {
+      setReviewingCancellation(false);
+    }
+  }
+
+  async function handleRejectCancellationRequest() {
+    if (!pendingCancellationRequest) return;
+    const reason = cancellationRejectReason.trim();
+    if (reason.length < 3) {
+      toast("warning", "Indique o motivo da recusa");
+      return;
+    }
+
+    setReviewingCancellation(true);
+    try {
+      await rejectCancellationRequest(pendingCancellationRequest.id, reason);
+      toast("success", "Pedido recusado; a viagem continua ativa");
+      setShowCancellationRejectForm(false);
+      setCancellationRejectReason("");
+      onUpdate();
+      await loadTripData(t.id);
+    } catch {
+      toast("danger", "Não foi possível recusar o cancelamento");
+      await loadTripData(t.id);
+    } finally {
+      setReviewingCancellation(false);
+    }
+  }
+
+  async function handleDeleteTrip() {
+    if (!t) return;
+    setActioning(true);
+    try {
+      await deleteTrip(t.id);
+      toast("success", "Viagem excluída");
+      onUpdate();
+      handleClose();
+    } catch {
+      toast("danger", "Erro ao eliminar viagem");
+    } finally {
+      setActioning(false);
+    }
+  }
+
+  async function handleMoveStatus(status: Trip["status"]) {
+    if (!t) return;
+    if (
+      t.status === "searching_drivers" &&
+      status === "awaiting_client_confirmation"
+    ) {
+      const blockReason = getClientConfirmationBlockReason(candidates);
+      if (blockReason) {
+        toast("warning", blockReason);
+        return;
+      }
+    }
+
+    setActioning(true);
+    try {
+      await updateTripStatus(t.id, status);
+      toast("success", "Estado da viagem atualizado");
+      onUpdate();
+      await loadTripData(t.id);
+    } catch {
+      toast("danger", "Erro ao atualizar estado");
     } finally {
       setActioning(false);
     }
@@ -312,8 +632,19 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
     if (!t) return;
     try {
       await removeTripDriverCandidate(t.id, driverProfileId);
-      setCandidates((prev) => prev.filter((c) => c.driver_profile_id !== driverProfileId));
-      toast("success", "Candidato removido");
+      const [updatedCandidates, updatedTrip] = await Promise.all([
+        fetchTripDriverCandidates(t.id),
+        fetchTripById(t.id),
+      ]);
+      setCandidates(updatedCandidates);
+      setLiveTrip(updatedTrip);
+      onUpdate();
+      toast(
+        "success",
+        t.driver_profile_id === driverProfileId
+          ? "Motorista removido. Viagem voltou para buscando motoristas"
+          : "Candidato removido",
+      );
     } catch {
       toast("danger", "Erro ao remover candidato");
     }
@@ -321,24 +652,108 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
 
   async function handleUpdateCandidateStatus(
     driverProfileId: string,
-    status: TripDriverCandidateStatus
+    status: TripDriverCandidateStatus,
   ) {
     if (!t) return;
     try {
-      const updated = await updateTripDriverCandidateStatus(t.id, driverProfileId, status);
-      setCandidates((prev) =>
-        prev.map((c) => (c.driver_profile_id === driverProfileId ? updated : c))
+      const updated = await updateTripDriverCandidateStatus(
+        t.id,
+        driverProfileId,
+        status,
       );
-      toast("success", `Candidato marcado como ${candidateStatusLabels[status]}`);
+      setCandidates((prev) =>
+        prev.map((c) =>
+          c.driver_profile_id === driverProfileId ? updated : c,
+        ),
+      );
+      toast(
+        "success",
+        `Candidato marcado como ${candidateStatusLabels[status]}`,
+      );
     } catch {
-      toast("danger", "Erro ao atualizar status do candidato");
+      toast("danger", "Erro ao atualizar estado do candidato");
+    }
+  }
+
+  async function handleUpdateCandidatePrice(candidate: TripDriverCandidate) {
+    if (!t) return;
+    const rawValue = candidatePriceInputs[candidate.id]?.trim() ?? "";
+    const parsed = rawValue
+      ? Number(rawValue.replace(/\./g, "").replace(",", "."))
+      : null;
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
+      toast("warning", "Indique um preço válido");
+      return;
+    }
+
+    try {
+      const updated = await updateTripDriverCandidatePrice(
+        t.id,
+        candidate.driver_profile_id,
+        parsed,
+      );
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === candidate.id ? updated : c)),
+      );
+      setCandidatePriceInputs((prev) => ({
+        ...prev,
+        [candidate.id]: parsed == null ? "" : String(parsed),
+      }));
+      toast("success", "Preço do motorista atualizado");
+    } catch {
+      toast("danger", "Erro ao atualizar preço do motorista");
+    }
+  }
+
+  async function handleRejectCandidatePrice(candidate: TripDriverCandidate) {
+    if (!t) return;
+    try {
+      const updated = await rejectTripDriverCandidatePrice(
+        t.id,
+        candidate.driver_profile_id,
+      );
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === candidate.id ? updated : c)),
+      );
+      setCandidatePriceInputs((prev) => ({ ...prev, [candidate.id]: "" }));
+      toast("success", "Preço recusado e solicitação devolvida ao motorista");
+    } catch {
+      toast("danger", "Erro ao recusar preço do motorista");
+    }
+  }
+
+  async function handleSendKzProposal(candidate: TripDriverCandidate) {
+    if (!t) return;
+    const rawValue = candidatePriceInputs[candidate.id]?.trim() ?? "";
+    const parsed = Number(rawValue.replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      toast("warning", "Indique uma proposta da Só Serviços válida");
+      return;
+    }
+
+    try {
+      const updated = await sendKzDriverProposal(
+        t.id,
+        candidate.driver_profile_id,
+        parsed,
+      );
+      setCandidates((prev) =>
+        prev.map((c) => (c.id === candidate.id ? updated : c)),
+      );
+      setCandidatePriceInputs((prev) => ({
+        ...prev,
+        [candidate.id]: String(parsed),
+      }));
+      toast("success", "Proposta da Só Serviços reenviada ao motorista");
+    } catch {
+      toast("danger", "Erro ao enviar proposta da Só Serviços");
     }
   }
 
   async function handleToggleIsPaid() {
     if (!t) return;
     const next = !t.is_paid;
-    setLiveTrip((prev) => prev ? { ...prev, is_paid: next } : prev);
+    setLiveTrip((prev) => (prev ? { ...prev, is_paid: next } : prev));
     try {
       await updateTripFinancial(t.id, {
         is_paid: next,
@@ -346,7 +761,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       });
       onUpdate();
     } catch {
-      setLiveTrip((prev) => prev ? { ...prev, is_paid: !next } : prev);
+      setLiveTrip((prev) => (prev ? { ...prev, is_paid: !next } : prev));
       toast("danger", "Erro ao atualizar pagamento da viagem");
     }
   }
@@ -354,24 +769,35 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
   async function handleToggleIsDriverPaied() {
     if (!t) return;
     const next = !t.is_driver_paied;
-    setLiveTrip((prev) => prev ? { ...prev, is_driver_paied: next } : prev);
+    setLiveTrip((prev) => (prev ? { ...prev, is_driver_paied: next } : prev));
     try {
       await updateTripFinancial(t.id, { is_driver_paied: next });
       onUpdate();
     } catch {
-      setLiveTrip((prev) => prev ? { ...prev, is_driver_paied: !next } : prev);
+      setLiveTrip((prev) =>
+        prev ? { ...prev, is_driver_paied: !next } : prev,
+      );
       toast("danger", "Erro ao atualizar pagamento do motorista");
     }
   }
 
   const handleSelectDriver = async (candidate: TripDriverCandidate) => {
     if (candidate.offered_price == null) return;
+    const driverName =
+      candidate.driver_profiles?.provider_profiles?.users?.full_name ??
+      "Motorista";
+    const confirmed = window.confirm(
+      `Aprovar a proposta de ${driverName} em nome do cliente por ${formatKz(candidate.offered_price)}?`,
+    );
+    if (!confirmed) return;
+
+    setSelectingCandidateId(candidate.id);
     try {
       await selectTripDriver(
         t.id,
         candidate.id,
         candidate.driver_profile_id,
-        candidate.offered_price
+        candidate.offered_price,
       );
       const [updatedCandidates, updatedTrip] = await Promise.all([
         fetchTripDriverCandidates(t.id),
@@ -379,24 +805,53 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
       ]);
       setCandidates(updatedCandidates);
       setLiveTrip(updatedTrip);
+      onUpdate();
       toast("success", `A aguardar validação do motorista — ${formatKz(candidate.offered_price)}`);
     } catch {
       toast("danger", "Erro ao selecionar motorista");
+    } finally {
+      setSelectingCandidateId(null);
     }
   };
 
   const handleApproveCandidate = async (
     driverProfileId: string,
-    approved: boolean
+    approved: boolean,
   ) => {
     try {
-      const updated = await approveDriverCandidate(t.id, driverProfileId, approved);
-      setCandidates((prev) =>
-        prev.map((c) => (c.driver_profile_id === driverProfileId ? updated : c))
+      const updated = await approveDriverCandidate(
+        t.id,
+        driverProfileId,
+        approved,
       );
-      toast("success", approved ? "Candidato aprovado para o cliente" : "Aprovação removida");
+      setCandidates((prev) =>
+        prev.map((c) =>
+          c.driver_profile_id === driverProfileId ? updated : c,
+        ),
+      );
+      toast(
+        "success",
+        approved ? "Candidato aprovado para o cliente" : "Aprovação removida",
+      );
     } catch {
       toast("danger", "Erro ao atualizar aprovação");
+    }
+  };
+
+  const handleOpenDriverHistory = async (
+    driverProfileId: string,
+    driverName: string,
+  ) => {
+    setDriverHistoryName(driverName);
+    setDriverHistory([]);
+    setDriverHistoryLoading(true);
+    try {
+      const rows = await fetchDriverTripHistory(driverProfileId);
+      setDriverHistory(rows);
+    } catch {
+      toast("danger", "Erro ao carregar histórico do motorista");
+    } finally {
+      setDriverHistoryLoading(false);
     }
   };
 
@@ -413,7 +868,7 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
         "danger",
         e instanceof Error
           ? e.message
-          : "Erro ao reenviar validação ao motorista"
+          : "Erro ao reenviar validação ao motorista",
       );
     } finally {
       setResendingDriverConfirmation(false);
@@ -448,7 +903,16 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
             aria-label="Voltar"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="19" y1="12" x2="5" y2="12" />
               <polyline points="12 19 5 12 12 5" />
             </svg>
@@ -458,7 +922,9 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             <h2 className="text-lg font-heading font-black text-dark leading-tight truncate">
               {route}
             </h2>
-            <p className="text-sm text-contrast font-body mt-0.5">{passengerName}</p>
+            <p className="text-sm text-contrast font-body mt-0.5">
+              {passengerName}
+            </p>
           </div>
 
           {/* Botão fechar — desktop apenas */}
@@ -467,7 +933,16 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-all duration-150 cursor-pointer shrink-0"
             aria-label="Fechar"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -484,28 +959,130 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
             {/* ── LEFT COLUMN (65%) ── */}
             <div className="px-4 md:px-6 py-5 md:border-r border-border md:overflow-y-auto md:w-[65%]">
               {/* Main Info */}
-              <SectionTitle>Informações da Viagem</SectionTitle>
+              <div className="flex items-center justify-between mt-6 mb-3">
+                <div className="flex items-center gap-2">
+                  <SectionTitle>Informações da Viagem</SectionTitle>
+                  {isFlash && <FlashBadge />}
+                </div>
+                {!isFlash && (
+                  <button
+                    type="button"
+                    onClick={() => setEditModalOpen(true)}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-heading font-bold text-dark hover:border-primary hover:text-primary transition-colors"
+                  >
+                    Editar viagem
+                  </button>
+                )}
+              </div>
+              {isFlash && (
+                <p className="mb-3 text-xs text-contrast italic">
+                  Viagem Flash — apenas leitura. Sem aprovação admin necessária.
+                </p>
+              )}
+              {isScheduledChooseDriver && (
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-xs text-contrast italic">
+                    Escolha seu Motorista — cliente selecionou motorista diretamente. Aprovação admin não requerida.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const reason = window.prompt(
+                        "Motivo do cancelamento (emergência):",
+                      );
+                      if (!reason) return;
+                      try {
+                        const { cancelScheduledChooseDriverTrip } = await import(
+                          "@/lib/scheduled-direct"
+                        );
+                        await cancelScheduledChooseDriverTrip(t.id, reason);
+                        onUpdate?.();
+                        onClose();
+                      } catch (e) {
+                        alert(
+                          `Erro: ${e instanceof Error ? e.message : String(e)}`,
+                        );
+                      }
+                    }}
+                    className="rounded-lg border border-red-500 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    Cancelar (emergência)
+                  </button>
+                </div>
+              )}
 
               <InfoRow
                 label="Status"
                 value={
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-medium"
-                    style={{ backgroundColor: statusColor.bg, color: statusColor.text }}
+                    style={{
+                      backgroundColor: statusColor.bg,
+                      color: statusColor.text,
+                    }}
                   >
                     {statusLabels[t.status] ?? t.status}
                   </span>
                 }
               />
-              <InfoRow label="Cliente" value={t.users?.full_name ?? "—"} />
-              <InfoRow label="Categoria" value={t.service_categories?.name ?? "—"} />
-              <InfoRow label="Embarque" value={t.pickup_address?.formatted_address ?? "—"} />
-              <InfoRow label="Desembarque" value={t.dropoff_address?.formatted_address ?? "—"} />
-              <InfoRow label="Data e hora" value={formatDateTime(t.scheduled_datetime)} />
+              <InfoRow
+                label="Cliente"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <span>{t.users?.full_name ?? "—"}</span>
+                    {passengerPhone && (
+                      <button
+                        type="button"
+                        onClick={() => setShowClientPhonePopup(true)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-contrast hover:bg-surface-hover hover:text-dark transition-colors"
+                        aria-label="Abrir contacto do cliente"
+                        title="Telefone do cliente"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.92.32 1.82.6 2.69a2 2 0 0 1-.45 2.11L8 9a16 16 0 0 0 7 7l.48-.86a2 2 0 0 1 2.11-.45c.87.28 1.77.48 2.69.6A2 2 0 0 1 22 16.92z" />
+                        </svg>
+                      </button>
+                    )}
+                  </span>
+                }
+              />
+              <InfoRow
+                label="Categoria"
+                value={t.service_categories?.name ?? "—"}
+              />
+              <InfoRow
+                label="Embarque"
+                value={t.pickup_address?.formatted_address ?? "—"}
+              />
+              {orderedStops.map((stop, index) => (
+                <InfoRow
+                  key={stop.id}
+                  label={`Parada ${index + 1}`}
+                  value={stop.addresses?.formatted_address ?? "—"}
+                />
+              ))}
+              <InfoRow
+                label="Desembarque"
+                value={t.dropoff_address?.formatted_address ?? "—"}
+              />
+              <InfoRow
+                label="Data e hora"
+                value={formatDateTime(t.scheduled_datetime)}
+              />
               {t.is_round_trip && (
                 <InfoRow
                   label="Retorno"
-                  value={t.return_datetime ? formatDateTime(t.return_datetime) : "—"}
+                  value={
+                    t.return_datetime ? formatDateTime(t.return_datetime) : "—"
+                  }
                 />
               )}
               <InfoRow label="Passageiros" value={String(t.passenger_count)} />
@@ -514,7 +1091,9 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
 
               {t.observations && (
                 <div className="mt-3 p-3 rounded-lg bg-background border border-border">
-                  <p className="text-xs text-contrast mb-1 font-medium">Observações</p>
+                  <p className="text-xs text-contrast mb-1 font-medium">
+                    Observações
+                  </p>
                   <p className="text-xs text-dark">{t.observations}</p>
                 </div>
               )}
@@ -536,6 +1115,13 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                         ? "A reenviar..."
                         : "Reenviar pedido ao motorista"}
                     </button>
+                    <button
+                      onClick={() => handleMoveStatus("scheduled")}
+                      disabled={actioning}
+                      className="mt-2 w-full py-2 rounded-lg bg-accent text-background text-sm font-heading font-bold hover:bg-accent-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                    >
+                      {actioning ? "Aprovando..." : "Motorista: aprovar"}
+                    </button>
                   </div>
                 </>
               )}
@@ -545,21 +1131,33 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                 <>
                   <SectionTitle>Ações</SectionTitle>
                   {!showRejectForm ? (
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleApprove}
-                        disabled={actioning}
-                        className="flex-1 py-2 rounded-lg bg-accent text-background text-sm font-heading font-bold hover:bg-accent-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
-                      >
-                        Aprovar Viagem
-                      </button>
-                      <button
-                        onClick={() => setShowRejectForm(true)}
-                        disabled={actioning}
-                        className="flex-1 py-2 rounded-lg border border-danger text-danger text-sm font-heading font-bold hover:bg-danger/10 transition-colors duration-150 cursor-pointer disabled:opacity-50"
-                      >
-                        Recusar Viagem
-                      </button>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={handleApprove}
+                          disabled={actioning}
+                          className="flex-1 py-2 rounded-lg bg-accent text-background text-sm font-heading font-bold hover:bg-accent-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                        >
+                          Avançar etapa
+                        </button>
+                        <button
+                          onClick={() => setShowRejectForm(true)}
+                          disabled={actioning}
+                          className="flex-1 py-2 rounded-lg border border-danger text-danger text-sm font-heading font-bold hover:bg-danger/10 transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                        >
+                          Recusar Viagem
+                        </button>
+                      </div>
+                      {rollbackActions.map((action) => (
+                        <button
+                          key={action.to}
+                          onClick={() => handleMoveStatus(action.to)}
+                          disabled={actioning}
+                          className="w-full py-2 rounded-lg border border-border text-contrast text-sm font-heading font-bold hover:text-dark hover:bg-surface-hover transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
@@ -579,7 +1177,10 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                           Confirmar Recusa
                         </button>
                         <button
-                          onClick={() => { setShowRejectForm(false); setRejectReason(""); }}
+                          onClick={() => {
+                            setShowRejectForm(false);
+                            setRejectReason("");
+                          }}
                           className="px-4 py-2 rounded-lg border border-border text-contrast text-sm font-body hover:text-dark hover:bg-surface-hover transition-colors duration-150 cursor-pointer"
                         >
                           Cancelar
@@ -590,6 +1191,35 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                 </>
               )}
 
+              {t.status !== "under_review" &&
+                (visibleForwardActions.length > 0 ||
+                  rollbackActions.length > 0) && (
+                  <>
+                    <SectionTitle>Ações</SectionTitle>
+                    <div className="flex flex-col gap-2">
+                      {visibleForwardActions.map((action) => (
+                        <button
+                          key={action.to}
+                          onClick={() => handleMoveStatus(action.to)}
+                          disabled={actioning}
+                          className="w-full py-2 rounded-lg bg-accent text-background text-sm font-heading font-bold hover:bg-accent-dark transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                        >
+                          Avançar etapa
+                        </button>
+                      ))}
+                      {rollbackActions.map((action) => (
+                        <button
+                          key={action.to}
+                          onClick={() => handleMoveStatus(action.to)}
+                          disabled={actioning}
+                          className="w-full py-2 rounded-lg border border-border text-contrast text-sm font-heading font-bold hover:text-dark hover:bg-surface-hover transition-colors duration-150 cursor-pointer disabled:opacity-50"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
             </div>
 
             {/* ── RIGHT COLUMN (35%) ── */}
@@ -597,9 +1227,33 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               {/* Driver Candidates */}
               <SectionTitle>Motoristas Candidatos</SectionTitle>
 
-              {/* Search input — visible only in searching_drivers */}
-              {t.status === "searching_drivers" && (
-                <div className="mb-2">
+              {/* Search input — visible only in searching_drivers (standard trips only) */}
+              {t.status === "searching_drivers" && !isFlash && (
+                <div className="mb-3 flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={driverCategoryFilter}
+                      onChange={(event) => setDriverCategoryFilter(event.target.value as "" | "simple" | "popular" | "luxury")}
+                      className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-dark"
+                      aria-label="Filtrar por categoria do carro"
+                    >
+                      <option value="">Todas as categorias</option>
+                      {Object.entries(vehicleCategoryLabels).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={driverRegionFilter}
+                      onChange={(event) => setDriverRegionFilter(event.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-2 py-2 text-xs text-dark"
+                      aria-label="Filtrar por região"
+                    >
+                      <option value="">Todas as regiões</option>
+                      {regionOptions.map((region) => (
+                        <option key={region.id} value={region.id}>{region.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <SearchableSelect
                     options={availableDrivers}
                     value={selectedDriverId}
@@ -610,6 +1264,35 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                     placeholder="Procurar e adicionar motorista..."
                     disabled={addingDriver}
                   />
+                  <button
+                    type="button"
+                    onClick={handleAddAllDrivers}
+                    disabled={addingAllDrivers}
+                    className="w-full py-2 rounded-lg border border-primary text-primary text-sm font-heading font-bold hover:bg-primary hover:text-on-primary transition-colors disabled:opacity-50"
+                  >
+                    {addingAllDrivers ? "A enviar..." : "Enviar para todos os aprovados"}
+                  </button>
+                  {nearbyAvailableDrivers.length > 0 && (
+                    <div className="border border-border rounded-lg p-3">
+                      <p className="text-xs font-heading font-bold text-contrast uppercase mb-2">
+                        Próximos do embarque
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {nearbyAvailableDrivers.map(({ driver, distance_meters }) => (
+                          <button
+                            type="button"
+                            key={driver!.id}
+                            onClick={() => handleAddCandidate(driver!.id)}
+                            disabled={addingDriver}
+                            className="flex justify-between gap-2 text-left text-xs text-dark hover:text-primary"
+                          >
+                            <span className="truncate">{driver!.provider_profiles?.users?.full_name ?? "Motorista"}</span>
+                            <span className="shrink-0 text-contrast">{(distance_meters / 1000).toFixed(1)} km</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -618,13 +1301,17 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                   Indisponível durante análise.
                 </p>
               ) : candidates.length === 0 ? (
-                <p className="text-xs text-contrast italic">Nenhum candidato indicado.</p>
+                <p className="text-xs text-contrast italic">
+                  Nenhum candidato indicado.
+                </p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {candidates.map((c) => {
                     const driverName =
-                      c.driver_profiles?.provider_profiles?.users?.full_name ?? "Motorista";
-                    const candStatus = (c.status ?? "pending") as TripDriverCandidateStatus;
+                      c.driver_profiles?.provider_profiles?.users?.full_name ??
+                      "Motorista";
+                    const candStatus = (c.status ??
+                      "pending") as TripDriverCandidateStatus;
                     const candColor = candidateStatusColors[candStatus];
                     return (
                       <div
@@ -632,11 +1319,26 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                         className="flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-background border border-border"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-dark font-body truncate">{driverName}</p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleOpenDriverHistory(
+                                c.driver_profile_id,
+                                driverName,
+                              )
+                            }
+                            className="block max-w-full text-left text-sm font-semibold text-dark font-body truncate hover:text-primary transition-colors cursor-pointer"
+                            title="Ver histórico do motorista"
+                          >
+                            {driverName}
+                          </button>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span
                               className="inline-block text-xs px-2 py-0.5 rounded-full font-medium"
-                              style={{ backgroundColor: candColor.bg, color: candColor.text }}
+                              style={{
+                                backgroundColor: candColor.bg,
+                                color: candColor.text,
+                              }}
                             >
                               {candidateStatusLabels[candStatus]}
                             </span>
@@ -645,92 +1347,349 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                                 {formatKz(c.offered_price)}
                               </span>
                             ) : (
-                              <span className="text-xs text-contrast/50 italic">A aguardar valor</span>
+                              <span className="text-xs text-contrast/50 italic">
+                                A aguardar valor
+                              </span>
                             )}
                           </div>
-                          {t.status === "searching_drivers" && candStatus === "accepted" && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={candidatePriceInputs[c.id] ?? ""}
+                              onChange={(e) =>
+                                setCandidatePriceInputs((prev) => ({
+                                  ...prev,
+                                  [c.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Valor"
+                              className="min-w-0 flex-1 rounded-lg border border-border bg-surface text-dark text-xs font-body px-2 py-1.5 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-contrast/40"
+                              aria-label={`Preço ofertado por ${driverName}`}
+                            />
                             <button
-                              onClick={() => handleApproveCandidate(c.driver_profile_id, !c.admin_approved)}
-                              className={`mt-2 px-3 py-1.5 rounded text-xs font-heading font-bold transition-colors cursor-pointer ${
-                                c.admin_approved
-                                  ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
-                                  : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
-                              }`}
+                              onClick={() => handleUpdateCandidatePrice(c)}
+                              className="px-2.5 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer"
                             >
-                              {c.admin_approved ? "Aprovado ✓" : "Aprovar para cliente"}
+                              Guardar
                             </button>
-                          )}
+                          </div>
+                          {c.price_rejection_reason ? (
+                            <p className="mt-1 text-xs font-body text-danger">
+                              {c.price_rejection_reason}
+                            </p>
+                          ) : null}
+                          {c.kz_proposal_locked &&
+                          c.kz_proposed_price != null ? (
+                            <p className="mt-1 text-xs font-body font-semibold text-green-600">
+                              proposta feita pela Só Serviços
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {c.offered_price != null && (
+                              <button
+                                type="button"
+                                onClick={() => handleRejectCandidatePrice(c)}
+                                className="px-3 py-1.5 rounded text-xs font-heading font-bold bg-danger/10 text-danger hover:bg-danger/20 transition-colors cursor-pointer"
+                              >
+                                Recusar preço
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleSendKzProposal(c)}
+                              className="px-3 py-1.5 rounded text-xs font-heading font-bold bg-green-500/10 text-green-700 hover:bg-green-500/20 transition-colors cursor-pointer"
+                            >
+                              Enviar proposta da Só Serviços
+                            </button>
+                          </div>
+                          {t.status === "searching_drivers" &&
+                            candStatus === "accepted" && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleApproveCandidate(
+                                      c.driver_profile_id,
+                                      !c.admin_approved,
+                                    )
+                                  }
+                                  disabled={selectingCandidateId !== null}
+                                  className={`px-3 py-1.5 rounded text-xs font-heading font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    c.admin_approved
+                                      ? "bg-green-500/20 text-green-600 hover:bg-red-500/20 hover:text-red-600"
+                                      : "bg-surface-hover text-contrast hover:bg-accent/20 hover:text-accent"
+                                  }`}
+                                >
+                                  {c.admin_approved
+                                    ? "Aprovado ✓"
+                                    : "Aprovar para cliente"}
+                                </button>
+                                {canAdminApproveForClient(t.status, c) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSelectDriver(c)}
+                                    disabled={selectingCandidateId !== null}
+                                    className="px-3 py-1.5 rounded bg-primary text-on-primary text-xs font-heading font-bold hover:bg-primary-dark transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {selectingCandidateId === c.id
+                                      ? "Aprovando..."
+                                      : "Cliente: aprovar"}
+                                  </button>
+                                )}
+                              </div>
+                            )}
                         </div>
-                        {/* Only show manual accept/reject for non-searching_drivers statuses */}
-                        {t.status !== "searching_drivers" && (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {candStatus !== "accepted" && (
-                              <button
-                                onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "accepted")}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer"
-                                aria-label="Marcar como aceito"
-                                title="Marcar como aceito"
-                              >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              </button>
-                            )}
-                            {candStatus !== "rejected" && (
-                              <button
-                                onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "rejected")}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
-                                aria-label="Marcar como rejeitado"
-                                title="Marcar como rejeitado"
-                              >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <line x1="18" y1="6" x2="6" y2="18" />
-                                  <line x1="6" y1="6" x2="18" y2="18" />
-                                </svg>
-                              </button>
-                            )}
-                            {candStatus !== "pending" && (
-                              <button
-                                onClick={() => handleUpdateCandidateStatus(c.driver_profile_id, "pending")}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                                aria-label="Voltar para pendente"
-                                title="Voltar para pendente"
-                              >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M3 12a9 9 0 1 0 9-9" />
-                                  <polyline points="3 4 3 10 9 10" />
-                                </svg>
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleRemoveCandidate(c.driver_profile_id)}
-                              className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 border-l border-border ml-1 pl-2 transition-colors cursor-pointer"
-                              aria-label="Remover candidato"
-                              title="Remover candidato"
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Only show manual accept/reject for non-searching_drivers statuses */}
+                          {t.status !== "searching_drivers" && (
+                            <>
+                              {candStatus !== "accepted" && (
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCandidateStatus(
+                                      c.driver_profile_id,
+                                      "accepted",
+                                    )
+                                  }
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                                  aria-label="Marcar como aceito"
+                                  title="Marcar como aceito"
+                                >
+                                  <svg
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                </button>
+                              )}
+                              {candStatus !== "rejected" && (
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCandidateStatus(
+                                      c.driver_profile_id,
+                                      "rejected",
+                                    )
+                                  }
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                                  aria-label="Marcar como rejeitado"
+                                  title="Marcar como rejeitado"
+                                >
+                                  <svg
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                  </svg>
+                                </button>
+                              )}
+                              {candStatus !== "pending" && (
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCandidateStatus(
+                                      c.driver_profile_id,
+                                      "pending",
+                                    )
+                                  }
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                                  aria-label="Voltar para pendente"
+                                  title="Voltar para pendente"
+                                >
+                                  <svg
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M3 12a9 9 0 1 0 9-9" />
+                                    <polyline points="3 4 3 10 9 10" />
+                                  </svg>
+                                </button>
+                              )}
+                            </>
+                          )}
+                          <button
+                            onClick={() =>
+                              handleRemoveCandidate(c.driver_profile_id)
+                            }
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 border-l border-border ml-1 pl-2 transition-colors cursor-pointer"
+                            aria-label="Remover candidato"
+                            title="Remover candidato"
+                          >
+                            <svg
+                              width="17"
+                              height="17"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
                             >
-                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
-                                <path d="M10 11v6" />
-                                <path d="M14 11v6" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
 
+              {/* Pending cancellation request */}
+              {pendingCancellationRequest && (
+                <>
+                  <SectionTitle>Pedido de Cancelamento</SectionTitle>
+                  <div className="rounded-lg border border-danger/30 bg-danger/5 p-3">
+                    <p className="text-sm font-heading font-bold text-dark">
+                      {pendingCancellationRequest.requested_by_user?.full_name ??
+                        "Motorista"}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-contrast">
+                      {pendingCancellationRequest.reason}
+                    </p>
+                    <p className="mt-2 text-[11px] text-contrast/70">
+                      Solicitado em {formatDateTime(pendingCancellationRequest.created_at)}
+                    </p>
+
+                    {!showCancellationRejectForm ? (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={handleApproveCancellationRequest}
+                          disabled={reviewingCancellation}
+                          className="min-h-11 rounded-lg bg-danger px-3 py-2 text-sm font-heading font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {reviewingCancellation ? "Analisando..." : "Aprovar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCancellationRejectForm(true)}
+                          disabled={reviewingCancellation}
+                          className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm font-heading font-bold text-dark transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Recusar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <label
+                          htmlFor="cancellation-reject-reason"
+                          className="mb-1.5 block text-xs font-medium text-dark"
+                        >
+                          Motivo da recusa
+                        </label>
+                        <textarea
+                          id="cancellation-reject-reason"
+                          value={cancellationRejectReason}
+                          onChange={(event) =>
+                            setCancellationRejectReason(event.target.value)
+                          }
+                          rows={3}
+                          placeholder="Explique por que a viagem deve continuar"
+                          className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-dark placeholder:text-contrast/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCancellationRejectForm(false);
+                              setCancellationRejectReason("");
+                            }}
+                            disabled={reviewingCancellation}
+                            className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm text-contrast transition-colors hover:bg-surface-hover hover:text-dark disabled:opacity-50"
+                          >
+                            Voltar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRejectCancellationRequest}
+                            disabled={
+                              reviewingCancellation ||
+                              cancellationRejectReason.trim().length < 3
+                            }
+                            className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-heading font-bold text-on-primary transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {reviewingCancellation
+                              ? "A enviar..."
+                              : "Confirmar recusa"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Confirmed Driver */}
               {t.driver_profiles?.provider_profiles?.users && (
                 <>
                   <SectionTitle>Motorista Confirmado</SectionTitle>
-                  <div className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/30">
-                    <p className="text-xs text-dark font-body">
+                  <div className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        t.driver_profile_id &&
+                        handleOpenDriverHistory(
+                          t.driver_profile_id,
+                          t.driver_profiles?.provider_profiles?.users
+                            ?.full_name ?? "Motorista",
+                        )
+                      }
+                      className="text-left text-xs text-dark font-body hover:text-primary transition-colors cursor-pointer"
+                      title="Ver histórico do motorista"
+                    >
                       {t.driver_profiles.provider_profiles.users.full_name}
-                    </p>
+                    </button>
+                    {t.driver_profile_id && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          t.driver_profile_id &&
+                          handleRemoveCandidate(t.driver_profile_id)
+                        }
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-contrast hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                        aria-label="Remover motorista confirmado"
+                        title="Remover motorista confirmado"
+                      >
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -738,7 +1697,9 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               {/* Status History */}
               <SectionTitle>Histórico de Status</SectionTitle>
               {history.length === 0 ? (
-                <p className="text-xs text-contrast italic">Sem histórico registado.</p>
+                <p className="text-xs text-contrast italic">
+                  Sem histórico registado.
+                </p>
               ) : (
                 <div className="flex flex-col gap-1">
                   {history.map((h) => (
@@ -748,14 +1709,18 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       <p className="text-xs text-dark font-body leading-tight">
                         {h.from_status ? (
                           <>
-                            <span className="text-contrast">{statusLabels[h.from_status] ?? h.from_status}</span>
+                            <span className="text-contrast">
+                              {statusLabels[h.from_status] ?? h.from_status}
+                            </span>
                             {" → "}
                           </>
                         ) : null}
                         <span>{statusLabels[h.to_status] ?? h.to_status}</span>
                       </p>
                       {h.observations && (
-                        <p className="text-xs text-contrast mt-0.5 italic">{h.observations}</p>
+                        <p className="text-xs text-contrast mt-0.5 italic">
+                          {h.observations}
+                        </p>
                       )}
                       <p className="text-[10px] text-contrast/60 mt-0.5">
                         {formatDateTime(h.created_at)}
@@ -778,7 +1743,16 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       : "bg-background border-border text-contrast hover:border-primary hover:text-primary"
                   }`}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                   {t.is_paid ? "Viagem paga" : "Marcar viagem como paga"}
@@ -792,10 +1766,21 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
                       : "bg-background border-border text-contrast hover:border-primary hover:text-primary"
                   }`}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  {t.is_driver_paied ? "Motorista pago" : "Marcar motorista como pago"}
+                  {t.is_driver_paied
+                    ? "Motorista pago"
+                    : "Marcar motorista como pago"}
                 </button>
               </div>
 
@@ -803,26 +1788,65 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               <div className="flex flex-col gap-1.5">
                 {t.estimated_price != null && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-contrast">
-                      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0 text-contrast"
+                    >
+                      <line x1="12" y1="1" x2="12" y2="23" />
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
-                    <span className="text-xs text-contrast">Preço estimado:</span>
-                    <span className="text-xs text-dark font-medium ml-auto">{formatKz(t.estimated_price)}</span>
+                    <span className="text-xs text-contrast">
+                      Preço estimado:
+                    </span>
+                    <span className="text-xs text-dark font-medium ml-auto">
+                      {formatKz(t.estimated_price)}
+                    </span>
                   </div>
                 )}
                 {t.final_price != null && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-contrast">
-                      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0 text-contrast"
+                    >
+                      <line x1="12" y1="1" x2="12" y2="23" />
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                     </svg>
                     <span className="text-xs text-contrast">Valor final:</span>
-                    <span className="text-xs text-dark font-medium ml-auto">{formatKz(t.final_price)}</span>
+                    <span className="text-xs text-dark font-medium ml-auto">
+                      {formatKz(t.final_price)}
+                    </span>
                   </div>
                 )}
                 {t.payment_method != null && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-contrast">
-                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0 text-contrast"
+                    >
+                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                      <line x1="1" y1="10" x2="23" y2="10" />
                     </svg>
                     <span className="text-xs text-contrast">Pagamento:</span>
                     <span className="text-xs text-dark font-medium ml-auto">{formatPaymentMethod(t.payment_method)}</span>
@@ -831,55 +1855,259 @@ export default function TripDetailModal({ trip, open, onClose, onUpdate }: TripD
               </div>
 
               {/* Danger Zone */}
-              {t.status !== "cancelled" && (
-                <>
-                  <div className="mt-6 pt-4 border-t border-danger/30">
-                    <p className="text-xs font-heading font-bold text-danger uppercase tracking-wider mb-3">
-                      Zona de Risco
+              {!loadingData && !cancellationRequestLoaded && (
+                <div className="mt-6 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-contrast">
+                  Revisão de cancelamento indisponível. Atualize a viagem antes
+                  de usar ações administrativas.
+                </div>
+              )}
+              {cancellationRequestLoaded && !pendingCancellationRequest && (
+                <div className="mt-6 pt-4 border-t border-danger/30">
+                <p className="text-xs font-heading font-bold text-danger uppercase tracking-wider mb-3">
+                  Zona de Risco
+                </p>
+                {!showDeleteConfirm ? (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full py-2 rounded-lg border border-danger/50 text-danger text-sm font-heading font-bold hover:bg-danger/10 transition-colors duration-150 cursor-pointer"
+                  >
+                    {t.status === "cancelled"
+                      ? "Eliminar Definitivamente"
+                      : "Cancelar Viagem"}
+                  </button>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-xs text-contrast">
+                      {t.status === "cancelled"
+                        ? "Deseja eliminar essa viagem? Essa ação não poderá ser desfeita."
+                        : "Deseja cancelar essa viagem?"}
                     </p>
-                    {!showDeleteConfirm ? (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setShowDeleteConfirm(true)}
-                        className="w-full py-2 rounded-lg border border-danger/50 text-danger text-sm font-heading font-bold hover:bg-danger/10 transition-colors duration-150 cursor-pointer"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={actioning}
+                        className="flex-1 py-2 rounded-lg border border-border text-contrast text-xs font-body hover:text-dark hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        Eliminar Viagem
+                        Não
                       </button>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs text-contrast">
-                          Escreva <strong className="text-dark">confirmar</strong> para cancelar a viagem:
-                        </p>
-                        <input
-                          type="text"
-                          value={deleteInput}
-                          onChange={(e) => setDeleteInput(e.target.value)}
-                          placeholder="confirmar"
-                          className="w-full rounded-lg border border-border bg-background text-dark text-sm font-body px-3 py-2 focus:outline-none focus:border-danger focus:ring-1 focus:ring-danger placeholder:text-contrast/40"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleCancel}
-                            disabled={deleteInput !== "confirmar" || actioning}
-                            className="flex-1 py-2 rounded-lg bg-danger text-white text-sm font-heading font-bold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40"
-                          >
-                            Confirmar
-                          </button>
-                          <button
-                            onClick={() => { setShowDeleteConfirm(false); setDeleteInput(""); }}
-                            className="px-3 py-2 rounded-lg border border-border text-contrast text-xs font-body hover:text-dark hover:bg-surface-hover transition-colors cursor-pointer"
-                          >
-                            Voltar
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      <button
+                        onClick={
+                          t.status === "cancelled"
+                            ? handleDeleteTrip
+                            : handleCancel
+                        }
+                        disabled={actioning}
+                        className="flex-1 py-2 rounded-lg bg-danger text-white text-sm font-heading font-bold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40"
+                      >
+                        Sim
+                      </button>
+                    </div>
                   </div>
-                </>
+                )}
+                </div>
               )}
             </div>
           </div>
         )}
       </div>
+      {driverHistoryName && (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-3xl max-h-[82vh] overflow-hidden rounded-xl bg-surface border border-border shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div>
+                <p className="text-sm font-heading font-bold text-dark">
+                  Histórico de viagens
+                </p>
+                <p className="text-xs text-contrast font-body">
+                  {driverHistoryName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDriverHistoryName(null)}
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-contrast hover:text-dark hover:bg-surface-hover transition-colors cursor-pointer"
+                aria-label="Fechar histórico"
+              >
+                x
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto max-h-[68vh]">
+              {driverHistoryLoading ? (
+                <p className="text-sm text-contrast font-body">
+                  A carregar histórico...
+                </p>
+              ) : driverHistory.length === 0 ? (
+                <p className="text-sm text-contrast font-body">
+                  Nenhuma viagem finalizada encontrada para este motorista.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {driverHistory.map(({ trip: historyTrip, ratings }) => {
+                    const price =
+                      historyTrip.final_price ?? historyTrip.estimated_price;
+                    return (
+                      <div
+                        key={historyTrip.id}
+                        className="rounded-xl border border-border bg-background p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-heading font-bold text-dark">
+                              {historyTrip.users?.full_name ?? "Cliente"}
+                            </p>
+                            <p className="text-xs text-contrast font-body">
+                              {formatDateTime(
+                                historyTrip.finished_at ??
+                                  historyTrip.scheduled_datetime,
+                              )}
+                            </p>
+                          </div>
+                          <span className="text-sm font-heading font-bold text-green-500">
+                            {formatKz(price)}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-body">
+                          <p className="text-contrast">
+                            Origem:{" "}
+                            <span className="text-dark">
+                              {historyTrip.pickup_address?.formatted_address ??
+                                "—"}
+                            </span>
+                          </p>
+                          <p className="text-contrast">
+                            Destino:{" "}
+                            <span className="text-dark">
+                              {historyTrip.dropoff_address?.formatted_address ??
+                                "—"}
+                            </span>
+                          </p>
+                          <p className="text-contrast">
+                            Pagamento:{" "}
+                            <span className="text-dark">
+                              {formatPaymentMethod(historyTrip.payment_method)}
+                            </span>
+                          </p>
+                          <p className="text-contrast">
+                            Passageiros:{" "}
+                            <span className="text-dark">
+                              {historyTrip.passenger_count}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="mt-3 border-t border-border pt-3">
+                          {ratings.length === 0 ? (
+                            <p className="text-xs text-contrast italic">
+                              Sem avaliações registadas.
+                            </p>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              {ratings.map((rating) => (
+                                <div
+                                  key={rating.id}
+                                  className="rounded-lg bg-surface px-3 py-2"
+                                >
+                                  <p className="text-xs font-heading font-bold text-dark">
+                                    Nota {Number(rating.rating).toFixed(1)}
+                                    <span className="ml-2 font-body font-normal text-contrast">
+                                      {rating.rater?.full_name ?? "Utilizador"}{" "}
+                                      avaliou{" "}
+                                      {rating.rated?.full_name ?? "utilizador"}
+                                    </span>
+                                  </p>
+                                  {rating.comment && (
+                                    <p className="mt-1 text-xs text-contrast font-body">
+                                      {rating.comment}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showClientPhonePopup && passengerPhone && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-heading font-bold text-dark">
+                  Telefone do cliente
+                </p>
+                <p className="mt-1 text-sm text-contrast">{passengerPhone}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClientPhonePopup(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-contrast hover:bg-background hover:text-dark transition-colors"
+                aria-label="Fechar popup"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(`tel:${passengerPhone}`, "_self");
+                  setShowClientPhonePopup(false);
+                }}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-heading font-bold text-on-primary hover:bg-primary-dark transition-colors"
+              >
+                Ligar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(passengerPhone);
+                  toast("success", "Número copiado");
+                }}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-heading font-bold text-dark hover:bg-background transition-colors"
+              >
+                Copiar número
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const whatsappUrl = passengerWhatsappNumber
+                    ? `https://wa.me/${passengerWhatsappNumber}`
+                    : `https://wa.me/?text=${encodeURIComponent(passengerPhone)}`;
+                  window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                }}
+                className="rounded-lg bg-[#22c55e] px-4 py-2 text-sm font-heading font-bold text-white hover:opacity-90 transition-opacity"
+              >
+                WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <EditTripBasicsModal
+        trip={t}
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        onSaved={onUpdate}
+      />
     </div>
   );
 }

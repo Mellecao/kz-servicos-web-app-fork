@@ -24,6 +24,11 @@
 .DS_Store
 *.pem
 
+# Firebase service account keys
+*-serviceaccount.json
+*-firebase-adminsdk-*.json
+supabase/secrets/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -46,5 +51,9 @@ next-env.d.ts
 # brainstorm sessions
 .superpowers/
 
-# Definições locais do Claude Code (podem conter tokens)
+# Definições locais do Claude Code (podem conter tokens) e lock do agendador
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Local Netlify folder
+.netlify

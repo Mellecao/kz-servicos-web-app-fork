@@ -261,6 +261,27 @@ describe("serviceAddress (morada do serviço)", () => {
     const r = { address_id: "a1", addresses: { formatted_address: " " }, observations: "Nota" };
     assert.deepEqual(serviceAddress(r), { address: null, notes: "Nota" });
   });
+
+  test("pedido criado pelo admin grava a morada nos dois sítios: não se repete como nota", () => {
+    const r = {
+      address_id: "a1",
+      addresses: { formatted_address: "Talatona, Luanda" },
+      observations: "  talatona, LUANDA ",
+    };
+    assert.deepEqual(serviceAddress(r), { address: "Talatona, Luanda", notes: null });
+  });
+
+  test("com morada registada, notas diferentes da morada mantêm-se como notas", () => {
+    const r = {
+      address_id: "a1",
+      addresses: { formatted_address: "Talatona, Luanda" },
+      observations: "Talatona, Luanda — portão azul",
+    };
+    assert.deepEqual(serviceAddress(r), {
+      address: "Talatona, Luanda",
+      notes: "Talatona, Luanda — portão azul",
+    });
+  });
 });
 
 describe("pedido criado pelo admin (convenção do app Cliente)", () => {

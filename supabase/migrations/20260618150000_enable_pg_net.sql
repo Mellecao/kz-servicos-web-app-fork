@@ -1,6 +1,3 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
 -- ============================================================================
 -- Migration: Enable pg_net extension
 -- Description: Habilita pg_net para permitir net.http_post() usado pelos

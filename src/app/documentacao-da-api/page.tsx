@@ -428,7 +428,7 @@ const tables: TableDoc[] = [
   {
     id: 'system_settings',
     name: 'system_settings',
-    description: 'Configurações globais do sistema em formato chave-valor (JSONB).',
+    description: 'Definições globais do sistema em formato chave-valor (JSONB).',
     columns: [
       { name: 'id', type: 'UUID', constraints: 'PK' },
       { name: 'key', type: 'VARCHAR(100)', constraints: 'UNIQUE, NOT NULL' },
@@ -593,7 +593,7 @@ export default function DocumentacaoDaApiPage() {
             <p className="text-lg text-gray-600 dark:text-gray-400 max-w-3xl">
               Referência completa do schema do banco de dados Supabase (PostgreSQL) do{' '}
               <strong>Só Serviços</strong>. Inclui tabelas, colunas, tipos, enums,
-              relacionamentos, triggers, políticas RLS e configurações de Realtime.
+              relacionamentos, triggers, políticas RLS e definições de Realtime.
             </p>
           </header>
 
@@ -734,7 +734,7 @@ export default function DocumentacaoDaApiPage() {
                 <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
                   <li>Acesso completo de leitura e escrita a todas as tabelas</li>
                   <li>Podem aprovar/rejeitar perfis de prestadores</li>
-                  <li>Podem gerir as categorias de serviço e as configurações do sistema</li>
+                  <li>Podem gerir as categorias de serviço e as definições do sistema</li>
                   <li>Podem visualizar e responder comentários privados</li>
                   <li>Podem visualizar todas as viagens, solicitações e avaliações</li>
                 </ul>

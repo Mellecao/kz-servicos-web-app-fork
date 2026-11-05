@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchClients, deleteUserById } from "@/lib/api";
+import {
+  deleteUserById,
+  fetchClientPerformance,
+  fetchClients,
+  fetchRatingsForUser,
+  isPublicRating,
+} from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { User } from "@/types/database";
+import type {
+  ClientMetrics,
+  ClientTripHistoryEntry,
+  DriverMetricPeriod,
+  Rating,
+  User,
+} from "@/types/database";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
 import { formatDate, formatPhoneAO, phoneMatches } from "@/lib/format";
+import ClientTripHistoryModal from "@/components/ClientTripHistoryModal";
 
 
 function getInitials(name: string): string {
@@ -18,29 +31,102 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+function SavedAddressesSummary({ client }: { client: User }) {
+  const saved = client.user_saved_addresses ?? [];
+  const home = saved.find((item) => item.label === "home");
+  const work = saved.find((item) => item.label === "work");
+  const items = [
+    home ? ["Casa", home.addresses?.formatted_address] : null,
+    work ? ["Trabalho", work.addresses?.formatted_address] : null,
+  ].filter(Boolean) as Array<[string, string | undefined]>;
+
+  if (items.length === 0) {
+    return <span className="text-xs text-contrast/60">Sem Casa/Trabalho</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {items.map(([label, address]) => (
+        <p key={label} className="text-xs text-contrast truncate">
+          <span className="font-semibold text-dark">{label}:</span>{" "}
+          {address ?? "—"}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export default function ClientesPage() {
   const { toast } = useToast();
   const [clients, setClients] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingClient, setEditingClient] = useState<User | null>(null);
+  const [ratingsClientName, setRatingsClientName] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [ratingsLoading, setRatingsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
   );
+  const [historyClient, setHistoryClient] = useState<User | null>(null);
+  const [historyPeriod, setHistoryPeriod] = useState<DriverMetricPeriod>("month");
+  const [historyMetrics, setHistoryMetrics] = useState<ClientMetrics | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<ClientTripHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
-  const loadClients = useCallback(() => {
+  const loadClients = useCallback(async () => {
     setLoading(true);
-    fetchClients()
-      .then(setClients)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    setLoadError(null);
+    try {
+      setClients(await fetchClients());
+    } catch (error) {
+      console.error(error);
+      setClients([]);
+      setLoadError("Não foi possível carregar os clientes.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     loadClients();
   }, [loadClients]);
+
+  useEffect(() => {
+    if (!historyClient) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchClientPerformance(historyClient.id, historyPeriod)
+      .then(({ metrics, history }) => {
+        if (cancelled) return;
+        setHistoryMetrics(metrics);
+        setHistoryEntries(history);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHistoryMetrics(null);
+        setHistoryEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyClient, historyPeriod]);
+
+  const refreshClientHistory = useCallback(() => {
+    if (!historyClient) return;
+    fetchClientPerformance(historyClient.id, historyPeriod)
+      .then(({ metrics, history }) => {
+        setHistoryMetrics(metrics);
+        setHistoryEntries(history);
+      })
+      .catch(() => {});
+  }, [historyClient, historyPeriod]);
 
   async function handleDeleteClient(client: User) {
     const name = client.full_name || client.email;
@@ -59,6 +145,19 @@ export default function ClientesPage() {
       toast("danger", message || "Erro ao eliminar cliente.");
     } finally {
       setDeletingUserId(null);
+    }
+  }
+
+  async function handleOpenRatings(client: User) {
+    setRatingsClientName(client.full_name || client.email);
+    setRatings([]);
+    setRatingsLoading(true);
+    try {
+      setRatings(await fetchRatingsForUser(client.id));
+    } catch {
+      toast("danger", "Erro ao carregar avaliações.");
+    } finally {
+      setRatingsLoading(false);
     }
   }
 
@@ -154,6 +253,20 @@ export default function ClientesPage() {
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : loadError ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-3 py-20 text-center"
+        >
+          <p className="text-sm text-danger">{loadError}</p>
+          <button
+            type="button"
+            onClick={loadClients}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-surface-hover"
+          >
+            Tentar novamente
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-contrast text-sm">
           Nenhum cliente encontrado.
@@ -169,11 +282,27 @@ export default function ClientesPage() {
                 {getInitials(client.full_name || client.email)}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-dark text-sm truncate">
+                <button
+                  type="button"
+                  onClick={() => setHistoryClient(client)}
+                  className="text-left font-semibold text-dark text-sm truncate hover:text-primary transition-colors"
+                >
                   {client.full_name || "—"}
-                </p>
+                </button>
                 <p className="text-muted text-xs truncate">{client.email}</p>
+                <div className="mt-2">
+                  <SavedAddressesSummary client={client} />
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => handleOpenRatings(client)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-dark hover:bg-surface-hover transition-colors"
+                aria-label={`Ver avaliações de ${client.full_name || client.email}`}
+                title="Avaliações"
+              >
+                ★
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -239,6 +368,9 @@ export default function ClientesPage() {
                     Telefone
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
+                    Casa/Trabalho
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
                     Estado
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-contrast uppercase tracking-wider">
@@ -266,9 +398,13 @@ export default function ClientesPage() {
                               .slice(0, 2)}
                           </span>
                         </div>
-                        <span className="text-sm font-medium text-dark">
+                        <button
+                          type="button"
+                          onClick={() => setHistoryClient(client)}
+                          className="text-left text-sm font-medium text-dark hover:text-primary transition-colors"
+                        >
                           {client.full_name}
-                        </span>
+                        </button>
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-contrast">
@@ -276,6 +412,9 @@ export default function ClientesPage() {
                     </td>
                     <td className="px-5 py-3.5 text-sm text-contrast">
                       {formatPhoneAO(client.phone)}
+                    </td>
+                    <td className="px-5 py-3.5 max-w-[260px]">
+                      <SavedAddressesSummary client={client} />
                     </td>
                     <td className="px-5 py-3.5">
                       <span
@@ -297,6 +436,13 @@ export default function ClientesPage() {
                       {formatDate(client.created_at)}
                     </td>
                     <td className="px-5 py-3.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenRatings(client)}
+                        className="mr-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-dark hover:bg-surface-hover transition-colors"
+                      >
+                        ★ Avaliações
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -359,6 +505,84 @@ export default function ClientesPage() {
         }}
         onSuccess={loadClients}
       />
+
+      <ClientTripHistoryModal
+        client={historyClient}
+        open={!!historyClient}
+        onClose={() => setHistoryClient(null)}
+        metrics={historyMetrics}
+        history={historyEntries}
+        period={historyPeriod}
+        onPeriodChange={setHistoryPeriod}
+        loading={historyLoading}
+        onTripUpdated={refreshClientHistory}
+      />
+
+      {ratingsClientName && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-background shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div>
+                <h2 className="text-lg font-heading font-bold text-dark">
+                  Avaliações de {ratingsClientName}
+                </h2>
+                <p className="mt-1 text-xs text-contrast">
+                  Avaliações negativas são anónimas e serão analisadas pela equipa Só Serviços.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRatingsClientName(null)}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm text-dark hover:bg-surface-hover"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto p-5">
+              {ratingsLoading ? (
+                <p className="text-sm text-contrast">A carregar avaliações...</p>
+              ) : ratings.length === 0 ? (
+                <p className="text-sm text-contrast">Nenhuma avaliação encontrada.</p>
+              ) : (
+                <div className="space-y-3">
+                  {ratings.map((item) => {
+                    const publicRating = isPublicRating(item);
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-border bg-surface p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-heading font-bold text-dark">
+                            ★ {Number(item.rating).toFixed(1)}
+                          </span>
+                          <span className="text-xs text-contrast">
+                            {formatDate(item.created_at)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-contrast">
+                          {publicRating
+                            ? `Avaliador: ${item.rater?.full_name ?? item.rater?.email ?? "Motorista"}`
+                            : "Avaliador: anónimo para avaliação negativa"}
+                        </p>
+                        {item.comment && (
+                          <p className="mt-2 text-sm text-dark">{item.comment}</p>
+                        )}
+                        {!publicRating && (
+                          <p className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+                            Comentário restrito ao painel admin para análise da equipa Só Serviços.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

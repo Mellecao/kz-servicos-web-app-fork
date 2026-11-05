@@ -1,23 +1,46 @@
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/lib/brand";
+import { isMissingPostgrestRelationError } from "@/lib/postgrest-errors";
+import { buildDriverMetrics, getDriverMetricPeriodRange } from "@/lib/driver-metrics";
+import { buildClientMetrics, getClientMetricPeriodRange } from "@/lib/client-metrics";
+import { buildServiceCategorySlug } from "@/lib/service-category-utils";
+import { isProviderWithoutDriverProfile } from "@/lib/provider-filters";
+import { shouldResetTripAfterCandidateRemoval } from "@/lib/trip-candidate-actions";
+import type { GooglePlaceAddress } from "@/lib/google-places";
+import type { TripPatch } from "@/lib/trip-edit";
 import type {
   User,
   Trip,
   TripStatus,
   TripDriverCandidate,
   TripDriverCandidateStatus,
+  TripCancellationRequest,
   TripStatusHistory,
   ServiceRequest,
   ServiceRequestStatus,
+  ServiceRequestProviderCandidate,
+  ServiceRequestProviderCandidateStatus,
   DriverProfile,
+  DriverRegion,
   ProviderProfile,
   Vehicle,
   Address,
   ServiceCategory,
+  ServiceTypeEnum,
   ProviderStatus,
   Debito,
   PaymentMethod,
   AdminLog,
+  Rating,
+  DriverTripHistoryEntry,
+  DriverMetricPeriod,
+  DriverMetrics,
+  ClientMetrics,
+  ClientTripHistoryEntry,
+  Notification,
+  SupportConversation,
+  SupportMessage,
+  UserSavedAddress,
 } from "@/types/database";
 
 // ─── Admin Logs ────────────────────────────────────────────
@@ -51,6 +74,57 @@ export async function fetchAdminLogs(): Promise<AdminLog[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as AdminLog[];
+}
+
+// ─── Notifications ────────────────────────────────────────
+export async function fetchAdminNotifications(): Promise<Notification[]> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("is_read", false)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []) as Notification[];
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteAdminNotification(id: string): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(
+    `/api/admin-notifications?id=${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: data.session?.access_token
+        ? { Authorization: `Bearer ${data.session.access_token}` }
+        : undefined,
+    },
+  );
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload.error || "Erro ao eliminar notificação");
+  }
+}
+
+export async function deleteAllAdminNotifications(): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch("/api/admin-notifications", {
+    method: "DELETE",
+    headers: data.session?.access_token
+      ? { Authorization: `Bearer ${data.session.access_token}` }
+      : undefined,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload.error || "Erro ao limpar notificações");
+  }
 }
 
 // ─── Auth ──────────────────────────────────────────────────
@@ -93,11 +167,29 @@ export async function fetchUsers(): Promise<User[]> {
 export async function fetchClients(): Promise<User[]> {
   const { data, error } = await supabase
     .from("users")
+    .select("*, user_saved_addresses(*, addresses(*))")
+    .eq("role", "client")
+    .order("created_at", { ascending: false });
+  if (!error) return (data ?? []) as User[];
+
+  // Casa/Trabalho is supplementary data. A missing migration or stale
+  // PostgREST relationship must not hide the clients stored in public.users.
+  const { data: clients, error: clientsError } = await supabase
+    .from("users")
     .select("*")
     .eq("role", "client")
     .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data as User[];
+
+  if (clientsError) throw clientsError;
+
+  console.warn(
+    "Clientes carregados sem Casa/Trabalho porque o relacionamento falhou:",
+    error.message,
+  );
+  return ((clients ?? []) as User[]).map((client) => ({
+    ...client,
+    user_saved_addresses: [],
+  }));
 }
 
 export async function fetchUserById(id: string): Promise<User> {
@@ -112,14 +204,24 @@ export async function fetchUserById(id: string): Promise<User> {
 
 // ─── Trips ─────────────────────────────────────────────────
 export async function fetchTrips(): Promise<Trip[]> {
-  const { data, error } = await supabase
+  const query = supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*)"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
     )
     .order("scheduled_datetime", { ascending: false });
-  if (error) throw error;
-  return data as Trip[];
+  const { data, error } = await query;
+  if (!error) return data as Trip[];
+  if (!isMissingPostgrestRelationError(error)) throw error;
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+    )
+    .order("scheduled_datetime", { ascending: false });
+  if (fallbackError) throw fallbackError;
+  return fallbackData as Trip[];
 }
 
 // ─── Service Requests ──────────────────────────────────────
@@ -127,11 +229,25 @@ export async function fetchServiceRequests(): Promise<ServiceRequest[]> {
   const { data, error } = await supabase
     .from("service_requests")
     .select(
-      "*, service_categories(*), addresses(*), users!client_id(*), provider_profiles(*, users(*))"
+      "*, service_categories(*), addresses(*), users!client_id(*), provider_profiles(*, users(*)), service_request_photos(*), service_request_provider_candidates(*, provider_profiles(*, users(*)))",
     )
     .order("service_date", { ascending: false });
   if (error) throw error;
   return data as ServiceRequest[];
+}
+
+export async function fetchServiceRequestById(
+  id: string,
+): Promise<ServiceRequest> {
+  const { data, error } = await supabase
+    .from("service_requests")
+    .select(
+      "*, service_categories(*), addresses(*), users!client_id(*), provider_profiles(*, users(*)), service_request_photos(*), service_request_provider_candidates(*, provider_profiles(*, users(*)))",
+    )
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return data as ServiceRequest;
 }
 
 // ─── Update Trip Financial ─────────────────────────────────
@@ -143,11 +259,15 @@ export async function updateTripFinancial(
     final_price?: number | null;
     payment_method?: PaymentMethod | null;
     payment_date?: string | null;
-  }
+  },
 ): Promise<void> {
   const { error } = await supabase.from("trips").update(payload).eq("id", id);
   if (error) throw error;
-  logAdminAction("Financeiro atualizado", id, payload as Record<string, unknown>);
+  logAdminAction(
+    "Financeiro atualizado",
+    id,
+    payload as Record<string, unknown>,
+  );
 }
 
 // ─── Update Service Request Financial ─────────────────────
@@ -158,14 +278,20 @@ export async function updateServiceRequestFinancial(
     is_provider_paied?: boolean;
     final_price?: number | null;
     payment_method?: PaymentMethod | null;
-  }
+  },
 ): Promise<void> {
-  const { error } = await supabase.from("service_requests").update(payload).eq("id", id);
+  const { error } = await supabase
+    .from("service_requests")
+    .update(payload)
+    .eq("id", id);
   if (error) throw error;
 }
 
 // ─── Update Trip Status ────────────────────────────────────
-export async function updateTripStatus(id: string, status: TripStatus): Promise<void> {
+export async function updateTripStatus(
+  id: string,
+  status: TripStatus,
+): Promise<void> {
   const { error } = await supabase
     .from("trips")
     .update({ status })
@@ -174,21 +300,67 @@ export async function updateTripStatus(id: string, status: TripStatus): Promise<
   logAdminAction("Status atualizado", id, { status });
 }
 
+// ─── Admin Update Trip ────────────────────────────────────
+export async function adminUpdateTrip(
+  tripId: string,
+  updates: TripPatch,
+): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(data.session?.access_token
+        ? { Authorization: `Bearer ${data.session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify(updates),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Erro ao atualizar viagem");
+  logAdminAction("Viagem editada", tripId, updates as Record<string, unknown>);
+}
+
+export async function deleteTrip(id: string): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`/api/trips?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: data.session?.access_token
+      ? { Authorization: `Bearer ${data.session.access_token}` }
+      : undefined,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || "Erro ao eliminar viagem");
+  logAdminAction("Viagem excluída", id, {});
+}
+
 // ─── Fetch Single Trip ─────────────────────────────────────
 export async function fetchTripById(id: string): Promise<Trip> {
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))"
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), trip_stops(*, addresses(*)), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
     )
     .eq("id", id)
     .single();
-  if (error) throw error;
-  return data as Trip;
+  if (!error) return data as Trip;
+  if (!isMissingPostgrestRelationError(error)) throw error;
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), service_categories(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+    )
+    .eq("id", id)
+    .single();
+  if (fallbackError) throw fallbackError;
+  return fallbackData as Trip;
 }
 
 // ─── Trip Status History ───────────────────────────────────
-export async function fetchTripStatusHistory(tripId: string): Promise<TripStatusHistory[]> {
+export async function fetchTripStatusHistory(
+  tripId: string,
+): Promise<TripStatusHistory[]> {
   const { data, error } = await supabase
     .from("trip_status_history")
     .select("*")
@@ -238,12 +410,171 @@ export async function cancelTrip(id: string): Promise<void> {
   logAdminAction("Viagem cancelada", id, {});
 }
 
+// ─── Trip Cancellation Requests ──────────────────────────
+const tripCancellationRequestSelect =
+  "*, requested_by_user:users!requested_by(id, full_name, email, phone), reviewed_by_user:users!reviewed_by(id, full_name, email)";
+
+export async function fetchPendingCancellationRequest(
+  tripId: string,
+): Promise<TripCancellationRequest | null> {
+  const { data, error } = await supabase
+    .from("trip_cancellation_requests")
+    .select(tripCancellationRequestSelect)
+    .eq("trip_id", tripId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) throw error;
+  return (data as TripCancellationRequest | null) ?? null;
+}
+
+export async function approveCancellationRequest(
+  requestId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("trip_cancellation_requests")
+    .update({ status: "approved" })
+    .eq("id", requestId)
+    .eq("status", "pending")
+    .select("id, trip_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Solicitação já analisada");
+  logAdminAction("Cancelamento aprovado", data.trip_id, {
+    cancellation_request_id: data.id,
+  });
+}
+
+export async function rejectCancellationRequest(
+  requestId: string,
+  reason: string,
+): Promise<void> {
+  const reviewReason = reason.trim();
+  if (reviewReason.length < 3) {
+    throw new Error("Indique o motivo da recusa");
+  }
+
+  const { data, error } = await supabase
+    .from("trip_cancellation_requests")
+    .update({ status: "rejected", review_reason: reviewReason })
+    .eq("id", requestId)
+    .eq("status", "pending")
+    .select("id, trip_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Solicitação já analisada");
+  logAdminAction("Cancelamento recusado", data.trip_id, {
+    cancellation_request_id: data.id,
+    reason: reviewReason,
+  });
+}
+
+// ─── KZ Support Chat ─────────────────────────────────────
+const supportConversationSelect =
+  "*, provider:users!provider_user_id(id, full_name, email, phone, avatar_url, is_active)";
+const supportMessageSelect =
+  "*, sender:users!sender_id(id, full_name, avatar_url, role)";
+
+export async function fetchSupportConversations(): Promise<
+  SupportConversation[]
+> {
+  const { data, error } = await supabase
+    .from("support_conversations")
+    .select(supportConversationSelect)
+    .not("last_message_at", "is", null)
+    .order("last_message_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SupportConversation[];
+}
+
+export async function fetchSupportConversationByProvider(
+  providerUserId: string,
+): Promise<SupportConversation | null> {
+  const { data, error } = await supabase
+    .from("support_conversations")
+    .select(supportConversationSelect)
+    .eq("provider_user_id", providerUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SupportConversation | null) ?? null;
+}
+
+export async function fetchSupportMessages(
+  conversationId: string,
+  options: { before?: string; limit?: number } = {},
+): Promise<SupportMessage[]> {
+  const limit = options.limit ?? 50;
+  let query = supabase
+    .from("support_messages")
+    .select(supportMessageSelect)
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (options.before) {
+    query = query.lt("created_at", options.before);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return ((data ?? []) as SupportMessage[]).reverse();
+}
+
+export async function sendSupportMessage(
+  conversationId: string,
+  senderId: string,
+  message: string,
+): Promise<void> {
+  const cleanMessage = message.trim();
+  if (!cleanMessage || cleanMessage.length > 4000) {
+    throw new Error("A mensagem deve ter entre 1 e 4000 caracteres");
+  }
+
+  const { error } = await supabase.from("support_messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    message: cleanMessage,
+  });
+  if (error) throw error;
+}
+
+export async function markSupportMessagesRead(
+  conversationId: string,
+  readerId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("support_messages")
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .neq("sender_id", readerId)
+    .eq("is_read", false);
+  if (error) throw error;
+}
+
 // ─── Trip Driver Candidates ────────────────────────────────
-export async function fetchTripDriverCandidates(tripId: string): Promise<TripDriverCandidate[]> {
+const tripDriverCandidateSelect =
+  "*, driver_profiles(*, provider_profiles(*, users(*)))";
+
+export async function fetchTripDriverCandidates(
+  tripId: string,
+): Promise<TripDriverCandidate[]> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .select(tripDriverCandidateSelect)
     .eq("trip_id", tripId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as TripDriverCandidate[];
+}
+
+export async function fetchTripDriverCandidatesForTrips(
+  tripIds: string[],
+): Promise<TripDriverCandidate[]> {
+  if (tripIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .select(tripDriverCandidateSelect)
+    .in("trip_id", tripIds)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as TripDriverCandidate[];
@@ -251,35 +582,93 @@ export async function fetchTripDriverCandidates(tripId: string): Promise<TripDri
 
 export async function addTripDriverCandidate(
   tripId: string,
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
-    .insert({ trip_id: tripId, driver_profile_id: driverProfileId, status: "pending" })
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .insert({
+      trip_id: tripId,
+      driver_profile_id: driverProfileId,
+      status: "pending",
+    })
+    .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
-  logAdminAction("Motorista adicionado como candidato", tripId, { driver_profile_id: driverProfileId });
+  logAdminAction("Motorista adicionado como candidato", tripId, {
+    driver_profile_id: driverProfileId,
+  });
   return data as TripDriverCandidate;
+}
+
+export async function addAllApprovedTripCandidates(tripId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("add_all_approved_trip_candidates", {
+    p_trip_id: tripId,
+  });
+  if (error) throw error;
+  logAdminAction("Todos os motoristas aprovados adicionados", tripId, {
+    added_count: data ?? 0,
+  });
+  return Number(data ?? 0);
+}
+
+export async function fetchNearbyTripDrivers(tripId: string) {
+  const { data, error } = await supabase.rpc("nearby_trip_drivers", {
+    p_trip_id: tripId,
+    p_radius_meters: 10000,
+  });
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    driver_profile_id: string;
+    distance_meters: number;
+    vehicle_category: "simple" | "popular" | "luxury" | null;
+    regions: string[];
+  }>;
 }
 
 export async function removeTripDriverCandidate(
   tripId: string,
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<void> {
+  const { data: trip, error: tripError } = await supabase
+    .from("trips")
+    .select("driver_profile_id")
+    .eq("id", tripId)
+    .single();
+  if (tripError) throw tripError;
+
   const { error } = await supabase
     .from("trip_driver_candidates")
     .delete()
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
-  logAdminAction("Candidato removido", tripId, { driver_profile_id: driverProfileId });
+
+  if (
+    shouldResetTripAfterCandidateRemoval({
+      currentDriverProfileId: trip?.driver_profile_id,
+      removedDriverProfileId: driverProfileId,
+    })
+  ) {
+    const { error: resetError } = await supabase
+      .from("trips")
+      .update({
+        driver_profile_id: null,
+        final_price: null,
+        status: "searching_drivers",
+      })
+      .eq("id", tripId);
+    if (resetError) throw resetError;
+  }
+
+  logAdminAction("Candidato removido", tripId, {
+    driver_profile_id: driverProfileId,
+  });
 }
 
 export async function updateTripDriverCandidateStatus(
   tripId: string,
   driverProfileId: string,
-  status: TripDriverCandidateStatus
+  status: TripDriverCandidateStatus,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
@@ -292,7 +681,94 @@ export async function updateTripDriverCandidateStatus(
     .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
     .single();
   if (error) throw error;
-  logAdminAction("Status do candidato atualizado", tripId, { driver_profile_id: driverProfileId, status });
+  logAdminAction("Status do candidato atualizado", tripId, {
+    driver_profile_id: driverProfileId,
+    status,
+  });
+  return data as TripDriverCandidate;
+}
+
+export async function updateTripDriverCandidatePrice(
+  tripId: string,
+  driverProfileId: string,
+  offeredPrice: number | null,
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({
+      offered_price: offeredPrice,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select(tripDriverCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato atualizado", tripId, {
+    driver_profile_id: driverProfileId,
+    offered_price: offeredPrice,
+  });
+  return data as TripDriverCandidate;
+}
+
+export async function rejectTripDriverCandidatePrice(
+  tripId: string,
+  driverProfileId: string,
+): Promise<TripDriverCandidate> {
+  const message = "Preço fora do padrão, favor fazer nova proposta";
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({
+      status: "pending",
+      offered_price: null,
+      responded_at: null,
+      price_rejection_reason: message,
+      price_rejected_at: new Date().toISOString(),
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select(tripDriverCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato recusado", tripId, {
+    driver_profile_id: driverProfileId,
+  });
+  return data as TripDriverCandidate;
+}
+
+export async function sendKzDriverProposal(
+  tripId: string,
+  driverProfileId: string,
+  price: number,
+): Promise<TripDriverCandidate> {
+  const { data, error } = await supabase
+    .from("trip_driver_candidates")
+    .update({
+      status: "pending",
+      offered_price: price,
+      responded_at: null,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: price,
+      kz_proposed_at: new Date().toISOString(),
+      kz_proposal_locked: true,
+    })
+    .eq("trip_id", tripId)
+    .eq("driver_profile_id", driverProfileId)
+    .select(tripDriverCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Proposta da Só Serviços enviada ao candidato", tripId, {
+    driver_profile_id: driverProfileId,
+    kz_proposed_price: price,
+  });
   return data as TripDriverCandidate;
 }
 
@@ -300,36 +776,47 @@ export async function selectTripDriver(
   tripId: string,
   candidateId: string,
   driverProfileId: string,
-  offeredPrice: number
+  offeredPrice: number,
 ): Promise<void> {
-  const { error } = await supabase.rpc('select_trip_driver', {
+  const { error } = await supabase.rpc("select_trip_driver", {
     p_trip_id: tripId,
     p_candidate_id: candidateId,
     p_driver_profile_id: driverProfileId,
     p_offered_price: offeredPrice,
   });
   if (error) throw new Error(error.message);
-  logAdminAction("Motorista selecionado", tripId, { driver_profile_id: driverProfileId, offered_price: offeredPrice });
+  logAdminAction("Motorista selecionado", tripId, {
+    driver_profile_id: driverProfileId,
+    offered_price: offeredPrice,
+  });
 }
 
 export async function approveDriverCandidate(
   tripId: string,
   driverProfileId: string,
-  approved: boolean
+  approved: boolean,
 ): Promise<TripDriverCandidate> {
   const { data, error } = await supabase
     .from("trip_driver_candidates")
     .update({ admin_approved: approved })
     .eq("trip_id", tripId)
     .eq("driver_profile_id", driverProfileId)
-    .select("*, driver_profiles(*, provider_profiles(*, users(*)))")
+    .select(tripDriverCandidateSelect)
     .single();
   if (error) throw error;
-  logAdminAction(approved ? "Candidato aprovado para cliente" : "Aprovação do candidato removida", tripId, { driver_profile_id: driverProfileId });
+  logAdminAction(
+    approved
+      ? "Candidato aprovado para cliente"
+      : "Aprovação do candidato removida",
+    tripId,
+    { driver_profile_id: driverProfileId },
+  );
   return data as TripDriverCandidate;
 }
 
-export async function resendDriverConfirmationNotification(tripId: string): Promise<void> {
+export async function resendDriverConfirmationNotification(
+  tripId: string,
+): Promise<void> {
   type Relation<T> = T | T[] | null | undefined;
   type ResendTripRow = {
     status: TripStatus;
@@ -340,12 +827,12 @@ export async function resendDriverConfirmationNotification(tripId: string): Prom
     }>;
   };
   const firstRelation = <T>(value: Relation<T>): T | undefined =>
-    Array.isArray(value) ? value[0] : value ?? undefined;
+    Array.isArray(value) ? value[0] : (value ?? undefined);
 
   const { data, error } = await supabase
     .from("trips")
     .select(
-      "id, status, driver_profile_id, scheduled_datetime, pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address), driver_profiles(provider_profiles(user_id, users(full_name)))"
+      "id, status, driver_profile_id, scheduled_datetime, pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address), driver_profiles(provider_profiles(user_id, users(full_name)))",
     )
     .eq("id", tripId)
     .single();
@@ -396,13 +883,203 @@ export async function resendDriverConfirmationNotification(tripId: string): Prom
 // ─── Update Service Request Status ─────────────────────────
 export async function updateServiceRequestStatus(
   id: string,
-  status: ServiceRequestStatus
+  status: ServiceRequestStatus,
 ): Promise<void> {
   const { error } = await supabase
     .from("service_requests")
     .update({ status })
     .eq("id", id);
   if (error) throw error;
+  logAdminAction("Estado do serviço atualizado", id, { status });
+}
+
+export async function approveServiceRequest(id: string): Promise<void> {
+  await updateServiceRequestStatus(id, "searching_provider");
+}
+
+export async function approveServiceRequestForClient(id: string): Promise<void> {
+  await updateServiceRequestStatus(id, "awaiting_client_confirmation");
+}
+
+export async function approveServiceRequestForProvider(
+  id: string,
+): Promise<void> {
+  await updateServiceRequestStatus(id, "awaiting_provider_confirmation");
+}
+
+// ─── Service Request Provider Candidates ───────────────────
+const serviceRequestProviderCandidateSelect =
+  "*, provider_profiles(*, users(*))";
+
+export async function fetchServiceRequestProviderCandidates(
+  serviceRequestId: string,
+): Promise<ServiceRequestProviderCandidate[]> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .select(serviceRequestProviderCandidateSelect)
+    .eq("service_request_id", serviceRequestId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ServiceRequestProviderCandidate[];
+}
+
+export async function addServiceRequestProviderCandidate(
+  serviceRequestId: string,
+  providerProfileId: string,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .insert({
+      service_request_id: serviceRequestId,
+      provider_profile_id: providerProfileId,
+      status: "pending",
+    })
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Prestador adicionado como candidato", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function removeServiceRequestProviderCandidate(
+  serviceRequestId: string,
+  providerProfileId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("service_request_provider_candidates")
+    .delete()
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId);
+  if (error) throw error;
+  logAdminAction("Candidato de serviço removido", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+  });
+}
+
+export async function updateServiceRequestProviderCandidateStatus(
+  serviceRequestId: string,
+  providerProfileId: string,
+  status: ServiceRequestProviderCandidateStatus,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      status,
+      responded_at: status === "pending" ? null : new Date().toISOString(),
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Status do candidato de serviço atualizado", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    status,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function updateServiceRequestProviderCandidatePrice(
+  serviceRequestId: string,
+  providerProfileId: string,
+  offeredPrice: number | null,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      offered_price: offeredPrice,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato de serviço atualizado", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    offered_price: offeredPrice,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function rejectServiceRequestProviderCandidatePrice(
+  serviceRequestId: string,
+  providerProfileId: string,
+): Promise<ServiceRequestProviderCandidate> {
+  const message = "Preço fora do padrão, favor fazer nova proposta";
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      status: "pending",
+      offered_price: null,
+      responded_at: null,
+      price_rejection_reason: message,
+      price_rejected_at: new Date().toISOString(),
+      kz_proposed_price: null,
+      kz_proposed_at: null,
+      kz_proposal_locked: false,
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Preço do candidato de serviço recusado", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function sendKzServiceRequestProposal(
+  serviceRequestId: string,
+  providerProfileId: string,
+  price: number,
+): Promise<ServiceRequestProviderCandidate> {
+  const { data, error } = await supabase
+    .from("service_request_provider_candidates")
+    .update({
+      status: "pending",
+      offered_price: price,
+      responded_at: null,
+      price_rejection_reason: null,
+      price_rejected_at: null,
+      kz_proposed_price: price,
+      kz_proposed_at: new Date().toISOString(),
+      kz_proposal_locked: true,
+    })
+    .eq("service_request_id", serviceRequestId)
+    .eq("provider_profile_id", providerProfileId)
+    .select(serviceRequestProviderCandidateSelect)
+    .single();
+  if (error) throw error;
+  logAdminAction("Proposta da Só Serviços enviada ao candidato de serviço", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    price,
+  });
+  return data as ServiceRequestProviderCandidate;
+}
+
+export async function approveServiceRequestProviderCandidate(
+  serviceRequestId: string,
+  providerProfileId: string,
+  offeredPrice: number,
+): Promise<void> {
+  const { error } = await supabase.rpc("select_service_request_provider", {
+    p_service_request_id: serviceRequestId,
+    p_provider_profile_id: providerProfileId,
+    p_offered_price: offeredPrice,
+  });
+  if (error) throw error;
+  logAdminAction("Prestador aprovado para serviço", serviceRequestId, {
+    provider_profile_id: providerProfileId,
+    offered_price: offeredPrice,
+  });
 }
 
 // ─── Driver Profiles ───────────────────────────────────────
@@ -453,7 +1130,7 @@ export async function fetchDebitos(): Promise<Debito[]> {
     }));
 
   return [...tripDebitos, ...serviceDebitos].sort(
-    (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()
+    (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime(),
   );
 }
 
@@ -461,45 +1138,273 @@ export async function fetchDebitos(): Promise<Debito[]> {
 export async function fetchDriverProfiles(): Promise<DriverProfile[]> {
   const { data, error } = await supabase
     .from("driver_profiles")
-    .select("*, provider_profiles(*, users(*))");
+    .select("*, provider_profiles(*, users(*)), driver_profile_photos(*), driver_profile_regions(*, driver_regions(*)), vehicles(*)");
   if (error) throw error;
   return data as DriverProfile[];
 }
 
 export async function fetchVehiclesByDriver(
-  driverProfileId: string
+  driverProfileId: string,
 ): Promise<Vehicle[]> {
   const { data, error } = await supabase
     .from("vehicles")
-    .select("*")
+    .select("*, vehicle_photos(*)")
     .eq("driver_profile_id", driverProfileId);
   if (error) throw error;
   return data as Vehicle[];
+}
+
+export async function fetchDriverRegions(): Promise<DriverRegion[]> {
+  const { data, error } = await supabase
+    .from("driver_regions")
+    .select("*")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as DriverRegion[];
+}
+
+export async function createDriverRegion(name: string): Promise<DriverRegion> {
+  const cleanName = name.trim().replace(/\s+/g, " ");
+  if (cleanName.length < 2) throw new Error("Indique uma região com ao menos 2 caracteres");
+  const { data, error } = await supabase
+    .from("driver_regions")
+    .insert({ name: cleanName })
+    .select()
+    .single();
+  if (!error) return data as DriverRegion;
+
+  const { data: existing, error: existingError } = await supabase
+    .from("driver_regions")
+    .select("*")
+    .eq("normalized_name", cleanName.toLowerCase())
+    .single();
+  if (existingError) throw error;
+  return existing as DriverRegion;
+}
+
+export async function replaceDriverProfileRegions(
+  driverProfileId: string,
+  regionIds: string[],
+): Promise<void> {
+  const { error: deleteError } = await supabase
+    .from("driver_profile_regions")
+    .delete()
+    .eq("driver_profile_id", driverProfileId);
+  if (deleteError) throw deleteError;
+  if (regionIds.length === 0) return;
+  const { error: insertError } = await supabase
+    .from("driver_profile_regions")
+    .insert(regionIds.map((regionId) => ({
+      driver_profile_id: driverProfileId,
+      region_id: regionId,
+    })));
+  if (insertError) throw insertError;
+}
+
+export async function deleteDriverProfilePhoto(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("driver_profile_photos")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteVehiclePhoto(id: string): Promise<void> {
+  const { error } = await supabase.from("vehicle_photos").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Ratings ───────────────────────────────────────────────
+export async function fetchRatingsForUser(userId: string): Promise<Rating[]> {
+  const { data, error } = await supabase
+    .from("ratings")
+    .select(
+      "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+    )
+    .eq("rated_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Rating[];
+}
+
+export async function fetchDriverTripHistory(
+  driverProfileId: string,
+): Promise<DriverTripHistoryEntry[]> {
+  const { data: trips, error: tripsError } = await supabase
+    .from("trips")
+    .select(
+      "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+    )
+    .eq("driver_profile_id", driverProfileId)
+    .eq("status", "finished")
+    .order("finished_at", { ascending: false });
+  if (tripsError) throw tripsError;
+
+  const tripRows = (trips ?? []) as Trip[];
+  if (tripRows.length === 0) return [];
+
+  const { data: ratings, error: ratingsError } = await supabase
+    .from("ratings")
+    .select(
+      "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+    )
+    .in(
+      "trip_id",
+      tripRows.map((trip) => trip.id),
+    )
+    .order("created_at", { ascending: false });
+  if (ratingsError) throw ratingsError;
+
+  const ratingsByTrip = new Map<string, Rating[]>();
+  for (const rating of (ratings ?? []) as Rating[]) {
+    if (!rating.trip_id) continue;
+    ratingsByTrip.set(rating.trip_id, [
+      ...(ratingsByTrip.get(rating.trip_id) ?? []),
+      rating,
+    ]);
+  }
+
+  return tripRows.map((trip) => ({
+    trip,
+    ratings: ratingsByTrip.get(trip.id) ?? [],
+  }));
+}
+
+export async function fetchDriverPerformance(
+  driverProfileId: string,
+  driverUserId: string,
+  period: DriverMetricPeriod,
+): Promise<{ metrics: DriverMetrics; history: DriverTripHistoryEntry[] }> {
+  const range = getDriverMetricPeriodRange(period);
+  const rangeStart = range.start.toISOString();
+
+  const [tripsResult, candidatesResult, ratingsResult] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(
+        "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+      )
+      .eq("driver_profile_id", driverProfileId)
+      .gte("updated_at", rangeStart)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("trip_driver_candidates")
+      .select("id, trip_id, driver_profile_id, status, responded_at, created_at")
+      .eq("driver_profile_id", driverProfileId)
+      .gte("created_at", rangeStart),
+    supabase
+      .from("ratings")
+      .select(
+        "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+      )
+      .eq("rated_id", driverUserId)
+      .gte("created_at", rangeStart)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (tripsResult.error) throw tripsResult.error;
+  if (candidatesResult.error) throw candidatesResult.error;
+  if (ratingsResult.error) throw ratingsResult.error;
+
+  const tripRows = (tripsResult.data ?? []) as Trip[];
+  const ratings = (ratingsResult.data ?? []) as Rating[];
+  const metrics = buildDriverMetrics({
+    driverProfileId,
+    driverUserId,
+    range,
+    trips: tripRows,
+    candidates: (candidatesResult.data ?? []) as Array<{
+      id: string;
+      trip_id: string;
+      driver_profile_id: string;
+      status: string;
+      responded_at: string | null;
+      created_at: string;
+    }>,
+    ratings: ratings.map((rating) => ({
+      id: rating.id,
+      rated_id: rating.rated_id,
+      rating: Number(rating.rating),
+      created_at: rating.created_at,
+    })),
+  });
+
+  const ratingsByTrip = new Map<string, Rating[]>();
+  for (const rating of ratings) {
+    if (!rating.trip_id) continue;
+    ratingsByTrip.set(rating.trip_id, [
+      ...(ratingsByTrip.get(rating.trip_id) ?? []),
+      rating,
+    ]);
+  }
+
+  return {
+    metrics,
+    history: tripRows.map((trip) => ({
+      trip,
+      ratings: ratingsByTrip.get(trip.id) ?? [],
+    })),
+  };
+}
+
+export function isPublicRating(rating: Pick<Rating, "rating">): boolean {
+  return Number(rating.rating) >= 4;
 }
 
 // ─── Provider Profiles ─────────────────────────────────────
 export async function fetchProviderProfiles(): Promise<ProviderProfile[]> {
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select("*, users(*), service_categories(*)");
+    .select("*, users(*), service_categories(*), driver_profiles(id)");
   if (error) throw error;
-  return data as ProviderProfile[];
+  return ((data ?? []) as (ProviderProfile & { driver_profiles?: unknown })[])
+    .filter(isProviderWithoutDriverProfile)
+    .map((provider) => {
+      const cleanProvider = { ...provider };
+      delete cleanProvider.driver_profiles;
+      return cleanProvider;
+    });
 }
 
 // ─── Dashboard Stats ───────────────────────────────────────
 export async function fetchDashboardStats() {
   const now = new Date();
-  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const startOfThisMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1,
+  ).toISOString();
+  const startOfLastMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() - 1,
+    1,
+  ).toISOString();
+  const endOfLastMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    0,
+    23,
+    59,
+    59,
+    999,
+  ).toISOString();
+  const sixMonthsAgo = new Date(
+    now.getFullYear(),
+    now.getMonth() - 5,
+    1,
+  ).toISOString();
+  const thirtyDaysAgo = new Date(
+    now.getTime() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   const [
     tripsResult,
     servicesResult,
     paidTripsResult,
     paidServicesResult,
+    finishedTripsHistoricResult,
+    finishedServicesHistoricResult,
+    topDriversResult,
     ratingsResult,
     driversAvailableResult,
     pendingProvidersResult,
@@ -511,7 +1416,9 @@ export async function fetchDashboardStats() {
       .select("id, status, final_price, estimated_price, is_paid, created_at"),
     supabase
       .from("service_requests")
-      .select("id, status, final_price, estimated_price, is_paid, created_at, updated_at"),
+      .select(
+        "id, status, final_price, estimated_price, is_paid, created_at, updated_at",
+      ),
     supabase
       .from("trips")
       .select("final_price, payment_date, updated_at, payment_method")
@@ -522,6 +1429,27 @@ export async function fetchDashboardStats() {
       .select("final_price, updated_at, payment_method")
       .eq("is_paid", true)
       .gte("updated_at", sixMonthsAgo),
+    // Trips finalizadas (pagas ou não) nos últimos 6 meses — usado pra
+    // gráfico de receita mensal (mostra receita esperada, não só efetivada).
+    supabase
+      .from("trips")
+      .select("final_price, estimated_price, updated_at")
+      .eq("status", "finished")
+      .gte("updated_at", sixMonthsAgo),
+    supabase
+      .from("service_requests")
+      .select("final_price, estimated_price, updated_at")
+      .eq("status", "finished")
+      .gte("updated_at", sixMonthsAgo),
+    // Motoristas com mais viagens finalizadas nos últimos 30 dias.
+    supabase
+      .from("trips")
+      .select(
+        "driver_profile_id, driver_profiles(provider_profiles(users(full_name, avatar_url)))",
+      )
+      .eq("status", "finished")
+      .gte("updated_at", thirtyDaysAgo)
+      .not("driver_profile_id", "is", null),
     supabase.from("ratings").select("rating"),
     supabase
       .from("driver_profiles")
@@ -534,14 +1462,14 @@ export async function fetchDashboardStats() {
     supabase
       .from("trips")
       .select(
-        "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)"
+        "id, status, scheduled_datetime, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), pickup_address:addresses!pickup_address_id(formatted_address), dropoff_address:addresses!dropoff_address_id(formatted_address)",
       )
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
       .from("service_requests")
       .select(
-        "id, status, service_date, description, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), service_categories(name)"
+        "id, status, service_date, description, final_price, estimated_price, is_paid, payment_method, users!client_id(full_name), service_categories(name)",
       )
       .order("created_at", { ascending: false })
       .limit(5),
@@ -551,36 +1479,27 @@ export async function fetchDashboardStats() {
   const services = servicesResult.data ?? [];
   const paidTrips = paidTripsResult.data ?? [];
   const paidServices = paidServicesResult.data ?? [];
+  const finishedTripsHistoric = finishedTripsHistoricResult.data ?? [];
+  const finishedServicesHistoric = finishedServicesHistoricResult.data ?? [];
+  const topDriversRows = topDriversResult.data ?? [];
   const ratings = ratingsResult.data ?? [];
 
   // ── Revenue ────────────────────────────────────────────
   // Use payment_date when available, fall back to updated_at
-  const tripEffectiveDate = (t: { payment_date?: string | null; updated_at: string }) =>
-    t.payment_date ?? t.updated_at;
+  const tripEffectiveDate = (t: {
+    payment_date?: string | null;
+    updated_at: string;
+  }) => t.payment_date ?? t.updated_at;
 
-  const revenueThisMonth =
+  // Receita do mês agora inclui TAMBÉM os pendentes (finished + !is_paid) —
+  // decisão do produto: pendente ainda conta como receita esperada do mês.
+  const revenuePaidThisMonth =
     paidTrips
       .filter((t) => tripEffectiveDate(t) >= startOfThisMonth)
       .reduce((s, t) => s + (t.final_price ?? 0), 0) +
     paidServices
       .filter((s) => s.updated_at >= startOfThisMonth)
       .reduce((s, t) => s + (t.final_price ?? 0), 0);
-
-  const revenueLastMonth =
-    paidTrips
-      .filter((t) => {
-        const d = tripEffectiveDate(t);
-        return d >= startOfLastMonth && d <= endOfLastMonth;
-      })
-      .reduce((s, t) => s + (t.final_price ?? 0), 0) +
-    paidServices
-      .filter((s) => s.updated_at >= startOfLastMonth && s.updated_at <= endOfLastMonth)
-      .reduce((s, t) => s + (t.final_price ?? 0), 0);
-
-  const revenueChange =
-    revenueLastMonth > 0
-      ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
-      : null;
 
   const pendingRevenue =
     trips
@@ -590,8 +1509,29 @@ export async function fetchDashboardStats() {
       .filter((s) => s.status === "finished" && !s.is_paid)
       .reduce((s, t) => s + (t.final_price ?? t.estimated_price ?? 0), 0);
 
+  const revenueThisMonth = revenuePaidThisMonth + pendingRevenue;
+
+  const revenueLastMonth =
+    paidTrips
+      .filter((t) => {
+        const d = tripEffectiveDate(t);
+        return d >= startOfLastMonth && d <= endOfLastMonth;
+      })
+      .reduce((s, t) => s + (t.final_price ?? 0), 0) +
+    paidServices
+      .filter(
+        (s) =>
+          s.updated_at >= startOfLastMonth && s.updated_at <= endOfLastMonth,
+      )
+      .reduce((s, t) => s + (t.final_price ?? 0), 0);
+
+  const revenueChange =
+    revenueLastMonth > 0
+      ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
+      : null;
+
   const allPaid = [...paidTrips, ...paidServices].filter(
-    (i) => (i.final_price ?? 0) > 0
+    (i) => (i.final_price ?? 0) > 0,
   );
   const avgTicket =
     allPaid.length > 0
@@ -600,10 +1540,17 @@ export async function fetchDashboardStats() {
 
   // ── Operations ─────────────────────────────────────────
   const activeTripsStatuses = new Set([
-    "started", "scheduled", "searching_drivers",
-    "awaiting_client_confirmation", "awaiting_driver_confirmation",
+    "started",
+    "scheduled",
+    "searching_drivers",
+    "awaiting_client_confirmation",
+    "awaiting_driver_confirmation",
   ]);
-  const activeServiceStatuses = new Set(["in_progress", "assigned", "searching_provider"]);
+  const activeServiceStatuses = new Set([
+    "in_progress",
+    "assigned",
+    "searching_provider",
+  ]);
   const activeOps =
     trips.filter((t) => activeTripsStatuses.has(t.status)).length +
     services.filter((s) => activeServiceStatuses.has(s.status)).length;
@@ -615,19 +1562,36 @@ export async function fetchDashboardStats() {
   const completionRate =
     recentAll.length > 0
       ? Math.round(
-          (recentAll.filter((i) => i.status === "finished").length / recentAll.length) * 100
+          (recentAll.filter((i) => i.status === "finished").length /
+            recentAll.length) *
+            100,
         )
       : 0;
 
   const avgRating =
     ratings.length > 0
       ? Number(
-          (ratings.reduce((s, r) => s + Number(r.rating), 0) / ratings.length).toFixed(1)
+          (
+            ratings.reduce((s, r) => s + Number(r.rating), 0) / ratings.length
+          ).toFixed(1),
         )
       : 0;
 
   // ── Monthly chart (6 months) ───────────────────────────
-  const MONTH_LABELS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const MONTH_LABELS = [
+    "Jan",
+    "Fev",
+    "Mar",
+    "Abr",
+    "Mai",
+    "Jun",
+    "Jul",
+    "Ago",
+    "Set",
+    "Out",
+    "Nov",
+    "Dez",
+  ];
   const monthlyRevenue = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     return {
@@ -638,28 +1602,65 @@ export async function fetchDashboardStats() {
     };
   });
 
-  paidTrips.forEach((t) => {
-    if (!t.final_price) return;
-    const d = new Date(t.payment_date ?? t.updated_at);
+  // Popula com trips/services FINISHED (não só pagos) usando updated_at.
+  // Cobrindo tanto historico pago quanto pendente permite o grafico
+  // ter valores mesmo antes de tudo ser marcado como is_paid.
+  finishedTripsHistoric.forEach((t) => {
+    const value = t.final_price ?? t.estimated_price ?? 0;
+    if (value <= 0) return;
+    const d = new Date(t.updated_at);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const slot = monthlyRevenue.find((m) => m.month === key);
-    if (slot) slot.trips += t.final_price;
+    if (slot) slot.trips += value;
   });
 
-  paidServices.forEach((s) => {
-    if (!s.final_price) return;
+  finishedServicesHistoric.forEach((s) => {
+    const value = s.final_price ?? s.estimated_price ?? 0;
+    if (value <= 0) return;
     const d = new Date(s.updated_at);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const slot = monthlyRevenue.find((m) => m.month === key);
-    if (slot) slot.services += s.final_price;
+    if (slot) slot.services += value;
   });
 
-  // ── Payment method distribution ────────────────────────
+  // ── Payment method distribution (mantido para retrocompat) ─────
   const paymentMap: Record<string, number> = {};
   [...paidTrips, ...paidServices].forEach((item) => {
     const m = item.payment_method ?? "outro";
     paymentMap[m] = (paymentMap[m] ?? 0) + 1;
   });
+
+  // ── Top drivers (últimos 30 dias, por # de viagens finalizadas) ────
+  const driverAggregates = new Map<
+    string,
+    { fullName: string; avatarUrl: string | null; count: number }
+  >();
+  for (const row of topDriversRows) {
+    const id = row.driver_profile_id;
+    if (!id) continue;
+    // Supabase pode retornar joins nested como Map ou Array — normalizar.
+    const dp = Array.isArray(row.driver_profiles)
+      ? row.driver_profiles[0]
+      : row.driver_profiles;
+    const pp = Array.isArray(dp?.provider_profiles)
+      ? dp?.provider_profiles[0]
+      : dp?.provider_profiles;
+    const u = Array.isArray(pp?.users) ? pp?.users[0] : pp?.users;
+    const existing = driverAggregates.get(id);
+    if (existing) {
+      existing.count++;
+    } else {
+      driverAggregates.set(id, {
+        fullName: (u?.full_name as string | undefined) ?? "Motorista",
+        avatarUrl: (u?.avatar_url as string | null | undefined) ?? null,
+        count: 1,
+      });
+    }
+  }
+  const topDrivers = Array.from(driverAggregates.entries())
+    .map(([driverProfileId, v]) => ({ driverProfileId, ...v }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
   // ── Status distributions ───────────────────────────────
   const tripStatusMap: Record<string, number> = {};
@@ -674,10 +1675,10 @@ export async function fetchDashboardStats() {
 
   // ── Alerts ─────────────────────────────────────────────
   const alertAwaitingClient = trips.filter(
-    (t) => t.status === "awaiting_client_confirmation"
+    (t) => t.status === "awaiting_client_confirmation",
   ).length;
   const alertAwaitingDriver = trips.filter(
-    (t) => t.status === "awaiting_driver_confirmation"
+    (t) => t.status === "awaiting_driver_confirmation",
   ).length;
   const alertUnderReview =
     trips.filter((t) => t.status === "under_review").length +
@@ -701,6 +1702,7 @@ export async function fetchDashboardStats() {
     totalServices: services.length,
     monthlyRevenue,
     paymentMap,
+    topDrivers,
     tripStatusMap,
     serviceStatusMap,
     alertAwaitingClient,
@@ -723,9 +1725,33 @@ export async function fetchServiceCategories(): Promise<ServiceCategory[]> {
   return data as ServiceCategory[];
 }
 
+export async function createServiceCategory(input: {
+  name: string;
+  description?: string | null;
+  icon_url?: string | null;
+  service_type?: ServiceTypeEnum;
+}): Promise<ServiceCategory> {
+  const name = input.name.trim();
+  const { data, error } = await supabase
+    .from("service_categories")
+    .insert({
+      name,
+      slug: buildServiceCategorySlug(name),
+      description: input.description ?? null,
+      service_type: input.service_type ?? "other_service",
+      is_active: true,
+      icon_url: input.icon_url ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as ServiceCategory;
+}
+
 // ─── Addresses ─────────────────────────────────────────────
 export async function createAddress(address: {
   formatted_address: string;
+  google_place_id?: string;
   street?: string;
   number?: string;
   complement?: string;
@@ -733,6 +1759,8 @@ export async function createAddress(address: {
   city?: string;
   state?: string;
   zip_code?: string;
+  latitude?: number;
+  longitude?: number;
 }) {
   const { data, error } = await supabase
     .from("addresses")
@@ -741,6 +1769,203 @@ export async function createAddress(address: {
     .single();
   if (error) throw error;
   return data as Address;
+}
+
+// ─── User Saved Addresses ─────────────────────────────────
+export async function fetchUserSavedAddresses(
+  userId: string,
+): Promise<UserSavedAddress[]> {
+  const { data, error } = await supabase
+    .from("user_saved_addresses")
+    .select("*, addresses(*)")
+    .eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []) as UserSavedAddress[];
+}
+
+export async function saveUserSavedAddress(
+  userId: string,
+  label: "home" | "work",
+  address: GooglePlaceAddress,
+): Promise<void> {
+  const { data: newAddress, error: addressError } = await supabase
+    .from("addresses")
+    .insert({
+      formatted_address: address.formatted_address,
+      google_place_id: address.google_place_id ?? null,
+      latitude: address.latitude ?? null,
+      longitude: address.longitude ?? null,
+      street: address.street ?? null,
+      number: address.number ?? null,
+      neighborhood: address.neighborhood ?? null,
+      city: address.city ?? null,
+      state: address.state ?? null,
+      zip_code: address.zip_code ?? null,
+    })
+    .select("id")
+    .single();
+  if (addressError || !newAddress) {
+    throw addressError ?? new Error("addresses insert failed");
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("user_saved_addresses")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("label", label)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    const { error: updateError } = await supabase
+      .from("user_saved_addresses")
+      .update({
+        address_id: newAddress.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+    if (updateError) throw updateError;
+  } else {
+    const { error: insertError } = await supabase
+      .from("user_saved_addresses")
+      .insert({
+        user_id: userId,
+        address_id: newAddress.id,
+        label,
+      });
+    if (insertError) throw insertError;
+  }
+}
+
+export async function removeUserSavedAddress(
+  userId: string,
+  label: "home" | "work",
+): Promise<void> {
+  const { error } = await supabase
+    .from("user_saved_addresses")
+    .delete()
+    .eq("user_id", userId)
+    .eq("label", label);
+  if (error) throw error;
+}
+
+export async function fetchClientAddressHistory(
+  clientId: string,
+  field: "pickup" | "dropoff",
+  limit = 4,
+): Promise<GooglePlaceAddress[]> {
+  const { data, error } = await supabase
+    .from("trips")
+    .select(
+      "id, created_at, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*)",
+    )
+    .eq("client_id", clientId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+
+  const addresses: GooglePlaceAddress[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data ?? []) {
+    const rawUnknown =
+      field === "pickup" ? row.pickup_address : row.dropoff_address;
+    const raw = (
+      Array.isArray(rawUnknown) ? rawUnknown[0] : rawUnknown
+    ) as Address | null | undefined;
+    if (!raw) continue;
+    const key = raw.google_place_id ?? raw.formatted_address;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    addresses.push({
+      formatted_address: raw.formatted_address,
+      google_place_id: raw.google_place_id,
+      latitude: raw.latitude,
+      longitude: raw.longitude,
+      street: raw.street,
+      number: raw.number,
+      neighborhood: raw.neighborhood,
+      city: raw.city,
+      state: raw.state,
+      zip_code: raw.zip_code,
+    });
+    if (addresses.length >= limit) break;
+  }
+
+  return addresses;
+}
+
+export async function fetchClientPerformance(
+  clientId: string,
+  period: DriverMetricPeriod,
+): Promise<{ metrics: ClientMetrics; history: ClientTripHistoryEntry[] }> {
+  const range = getClientMetricPeriodRange(period);
+  const rangeStart = range.start.toISOString();
+
+  const [tripsResult, ratingsResult] = await Promise.all([
+    supabase
+      .from("trips")
+      .select(
+        "*, pickup_address:addresses!pickup_address_id(*), dropoff_address:addresses!dropoff_address_id(*), users!client_id(*), driver_profiles(*, provider_profiles(*, users(*)))",
+      )
+      .eq("client_id", clientId)
+      .gte("updated_at", rangeStart)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("ratings")
+      .select(
+        "*, rater:users!rater_id(id, full_name, email), rated:users!rated_id(id, full_name, email)",
+      )
+      .eq("rated_id", clientId)
+      .gte("created_at", rangeStart)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (tripsResult.error) throw tripsResult.error;
+  if (ratingsResult.error) throw ratingsResult.error;
+
+  const tripRows = (tripsResult.data ?? []) as Trip[];
+  const ratings = (ratingsResult.data ?? []) as Rating[];
+
+  const metrics = buildClientMetrics({
+    clientId,
+    range,
+    trips: tripRows.map((trip) => ({
+      id: trip.id,
+      status: trip.status,
+      client_id: trip.client_id,
+      final_price: trip.final_price,
+      estimated_price: trip.estimated_price,
+      finished_at: trip.finished_at,
+      cancelled_at: trip.cancelled_at,
+      updated_at: trip.updated_at,
+      scheduled_datetime: trip.scheduled_datetime,
+    })),
+    ratings: ratings.map((rating) => ({
+      id: rating.id,
+      rated_id: rating.rated_id,
+      rating: Number(rating.rating),
+      created_at: rating.created_at,
+    })),
+  });
+
+  const ratingsByTrip = new Map<string, Rating[]>();
+  for (const rating of ratings) {
+    if (!rating.trip_id) continue;
+    ratingsByTrip.set(rating.trip_id, [
+      ...(ratingsByTrip.get(rating.trip_id) ?? []),
+      rating,
+    ]);
+  }
+
+  return {
+    metrics,
+    history: tripRows.map((trip) => ({
+      trip,
+      ratings: ratingsByTrip.get(trip.id) ?? [],
+    })),
+  };
 }
 
 // ─── Admin Create Trip (via server route, bypasses RLS) ───
@@ -775,6 +2000,21 @@ export async function adminCreateTrip(trip: {
         state?: string | null;
         zip_code?: string | null;
       };
+  stops?: Array<
+    | string
+    | {
+        formatted_address: string;
+        google_place_id?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+        street?: string | null;
+        number?: string | null;
+        neighborhood?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zip_code?: string | null;
+      }
+  >;
   scheduled_datetime: string;
   is_round_trip: boolean;
   return_datetime?: string | null;
@@ -825,6 +2065,7 @@ export async function createServiceRequest(req: {
   service_date: string;
   description: string;
   address_id?: string | null;
+  estimated_price?: number | null;
   observations?: string | null;
 }) {
   const { data, error } = await supabase
@@ -834,6 +2075,20 @@ export async function createServiceRequest(req: {
     .single();
   if (error) throw error;
   return data as ServiceRequest;
+}
+
+export async function addServiceRequestPhoto(photo: {
+  service_request_id: string;
+  photo_url: string;
+  sort_order: number;
+}) {
+  const { data, error } = await supabase
+    .from("service_request_photos")
+    .insert(photo)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 // ─── Create User ───────────────────────────────────────────
@@ -865,6 +2120,20 @@ export async function deleteUserById(id: string): Promise<void> {
   if (!res.ok) throw new Error(data.error || "Erro ao eliminar utilizador");
 }
 
+export async function deleteDriverById(driverProfileId: string): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`/api/drivers/${encodeURIComponent(driverProfileId)}`, {
+    method: "DELETE",
+    headers: data.session?.access_token
+      ? { Authorization: `Bearer ${data.session.access_token}` }
+      : undefined,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload.error || "Erro ao eliminar motorista");
+  }
+}
+
 // ─── Update User ───────────────────────────────────────────
 export async function updateUserById(
   id: string,
@@ -875,7 +2144,7 @@ export async function updateUserById(
     cpf?: string | null;
     date_of_birth?: string | null;
     is_active?: boolean;
-  }
+  },
 ): Promise<User> {
   const res = await fetch(`/api/users/${id}`, {
     method: "PATCH",
@@ -910,8 +2179,9 @@ export async function updateDriverById(
       color?: string | null;
       license_plate?: string | null;
       passenger_capacity?: number | string | null;
+      category?: "simple" | "popular" | "luxury" | null;
     };
-  }
+  },
 ): Promise<DriverProfile> {
   const res = await fetch(`/api/drivers/${id}`, {
     method: "PATCH",
@@ -968,10 +2238,15 @@ export async function createVehicle(vehicle: {
   license_plate: string;
   vehicle_document_url?: string;
   passenger_capacity: number;
+  category?: "simple" | "popular" | "luxury" | null;
 }) {
   const { data, error } = await supabase
     .from("vehicles")
-    .insert({ ...vehicle, vehicle_document_url: vehicle.vehicle_document_url ?? "", is_active: true })
+    .insert({
+      ...vehicle,
+      vehicle_document_url: vehicle.vehicle_document_url ?? "",
+      is_active: true,
+    })
     .select()
     .single();
   if (error) throw error;

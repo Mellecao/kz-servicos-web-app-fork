@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef, type FormEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import SearchableSelect from "@/components/SearchableSelect";
+import AddressAutocompleteWithSuggestions from "@/components/AddressAutocompleteWithSuggestions";
 import NovoClienteForm from "@/components/forms/NovoClienteForm";
 import { useToast } from "@/components/Toast";
 import {
   adminCreateTrip,
-  fetchUsers,
+  fetchClientAddressHistory,
+  fetchClients,
   fetchServiceCategories,
 } from "@/lib/api";
 import {
@@ -15,6 +17,7 @@ import {
   type GooglePlaceAddress,
   useGooglePlacesAutocomplete,
 } from "@/lib/google-places";
+import { extractSavedAddress } from "@/lib/user-saved-addresses";
 import type { User, ServiceCategory, PaymentMethod } from "@/types/database";
 import type { SearchableSelectOption } from "@/components/SearchableSelect";
 import { PAYMENT_OPTIONS } from "@/lib/payment";
@@ -33,6 +36,69 @@ const labelClass = "block text-sm font-body text-contrast mb-1";
 
 function formatClientLabel(user: User): string {
   return user.cpf ? `${user.full_name} - ${user.cpf}` : user.full_name;
+}
+
+type StopAddress = {
+  id: string;
+  label: string;
+  placeAddress: GooglePlaceAddress | null;
+};
+
+function StopAddressField({
+  stop,
+  index,
+  onChange,
+  onRemove,
+}: {
+  stop: StopAddress;
+  index: number;
+  onChange: (stop: StopAddress) => void;
+  onRemove: () => void;
+}) {
+  const places = useGooglePlacesAutocomplete();
+  const detailsSeqRef = useRef(0);
+
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <label className={labelClass}>Parada {index + 1}</label>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs font-heading font-bold text-danger hover:text-danger/80"
+        >
+          Remover
+        </button>
+      </div>
+      <SearchableSelect
+        options={places.options}
+        value={stop.label}
+        onChange={(placeId, label) => {
+          const requestSeq = ++detailsSeqRef.current;
+          onChange({
+            ...stop,
+            label,
+            placeAddress: {
+              formatted_address: label,
+              google_place_id: placeId,
+            },
+          });
+          places.clear();
+          fetchGooglePlaceDetails(placeId, label).then((address) => {
+            if (requestSeq !== detailsSeqRef.current) return;
+            onChange({ ...stop, label: address.formatted_address, placeAddress: address });
+          });
+        }}
+        onSearchChange={(q) => {
+          detailsSeqRef.current++;
+          onChange({ ...stop, label: q, placeAddress: null });
+          places.search(q);
+        }}
+        placeholder="Adicionar parada no percurso"
+        loading={places.loading}
+      />
+    </div>
+  );
 }
 
 export default function NovaViagemForm({
@@ -55,23 +121,62 @@ export default function NovaViagemForm({
   const [dropoffAddress, setDropoffAddress] = useState("");
   const [dropoffPlaceAddress, setDropoffPlaceAddress] =
     useState<GooglePlaceAddress | null>(null);
+  const [stops, setStops] = useState<StopAddress[]>([]);
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [returnDatetime, setReturnDatetime] = useState("");
   const [passengerCount, setPassengerCount] = useState(1);
   const [childrenCount, setChildrenCount] = useState(0);
   const [luggageCount, setLuggageCount] = useState(0);
+  const [childrenObservations, setChildrenObservations] = useState("");
+  const [luggageObservations, setLuggageObservations] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [observations, setObservations] = useState("");
+  const [pickupHistory, setPickupHistory] = useState<GooglePlaceAddress[]>([]);
+  const [dropoffHistory, setDropoffHistory] = useState<GooglePlaceAddress[]>([]);
 
-  const pickupPlaces = useGooglePlacesAutocomplete();
-  const dropoffPlaces = useGooglePlacesAutocomplete();
-  const pickupDetailsSeqRef = useRef(0);
-  const dropoffDetailsSeqRef = useRef(0);
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === clientId) ?? null,
+    [clients, clientId],
+  );
+  const homeAddress = useMemo(
+    () => extractSavedAddress(selectedClient, "home"),
+    [selectedClient],
+  );
+  const workAddress = useMemo(
+    () => extractSavedAddress(selectedClient, "work"),
+    [selectedClient],
+  );
+
+  useEffect(() => {
+    if (!clientId) {
+      setPickupHistory([]);
+      setDropoffHistory([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      fetchClientAddressHistory(clientId, "pickup"),
+      fetchClientAddressHistory(clientId, "dropoff"),
+    ])
+      .then(([pickups, dropoffs]) => {
+        if (cancelled) return;
+        setPickupHistory(pickups);
+        setDropoffHistory(dropoffs);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPickupHistory([]);
+        setDropoffHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
 
   const loadClients = () => {
-    fetchUsers()
-      .then((users) => setClients(users.filter((u) => u.role === "client")))
+    fetchClients()
+      .then(setClients)
       .catch(() => toast("danger", "Erro ao carregar clientes"));
   };
 
@@ -93,17 +198,20 @@ export default function NovaViagemForm({
     setPickupPlaceAddress(null);
     setDropoffAddress("");
     setDropoffPlaceAddress(null);
+    setStops([]);
     setScheduledDatetime("");
     setIsRoundTrip(false);
     setReturnDatetime("");
     setPassengerCount(1);
     setChildrenCount(0);
     setLuggageCount(0);
+    setChildrenObservations("");
+    setLuggageObservations("");
     setPaymentMethod("");
     setObservations("");
     setSubmitted(false);
-    pickupPlaces.clear();
-    dropoffPlaces.clear();
+    setPickupHistory([]);
+    setDropoffHistory([]);
   }
 
   const clientOptions: SearchableSelectOption[] = clients.map((c) => ({
@@ -135,6 +243,19 @@ export default function NovaViagemForm({
 
     setSubmitting(true);
     try {
+      const combinedObservations =
+        [
+          observations.trim(),
+          childrenCount > 0 && childrenObservations.trim()
+            ? `Crianças: ${childrenObservations.trim()}`
+            : "",
+          luggageCount > 0 && luggageObservations.trim()
+            ? `Malas: ${luggageObservations.trim()}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n") || null;
+
       await adminCreateTrip({
         client_id: clientId,
         service_category_id: tripCategoryId,
@@ -142,6 +263,9 @@ export default function NovaViagemForm({
           pickupPlaceAddress ?? { formatted_address: pickupAddress },
         dropoff_address:
           dropoffPlaceAddress ?? { formatted_address: dropoffAddress },
+        stops: stops
+          .map((stop) => stop.placeAddress ?? { formatted_address: stop.label.trim() })
+          .filter((stop) => stop.formatted_address),
         scheduled_datetime: new Date(scheduledDatetime).toISOString(),
         is_round_trip: isRoundTrip,
         return_datetime: isRoundTrip
@@ -150,7 +274,7 @@ export default function NovaViagemForm({
         passenger_count: passengerCount,
         children_count: childrenCount,
         luggage_count: luggageCount,
-        observations: observations || null,
+        observations: combinedObservations,
         payment_method: paymentMethod || null,
       });
 
@@ -213,68 +337,74 @@ export default function NovaViagemForm({
           </div>
 
           {/* Morada de embarque */}
-          <div>
-            <label className={labelClass}>Morada de embarque</label>
-            <SearchableSelect
-              options={pickupPlaces.options}
-              value={pickupAddress}
-              onChange={(placeId, label) => {
-                setPickupAddress(label);
-                const requestSeq = ++pickupDetailsSeqRef.current;
-                setPickupPlaceAddress({
-                  formatted_address: label,
-                  google_place_id: placeId,
-                });
-                pickupPlaces.clear();
-                fetchGooglePlaceDetails(placeId, label).then((address) => {
-                  if (requestSeq !== pickupDetailsSeqRef.current) return;
-                  setPickupAddress(address.formatted_address);
-                  setPickupPlaceAddress(address);
-                });
-              }}
-              onSearchChange={(q) => {
-                pickupDetailsSeqRef.current++;
-                setPickupAddress(q);
-                setPickupPlaceAddress(null);
-                pickupPlaces.search(q);
-              }}
-              placeholder="Ex: Rua Rainha Ginga, Ingombota, Luanda"
-              error={isFieldInvalid(pickupAddress)}
-              loading={pickupPlaces.loading}
-            />
+          <AddressAutocompleteWithSuggestions
+            label="Morada de embarque"
+            placeholder="Ex: Rua das Flores, 123 - Centro"
+            value={pickupAddress}
+            error={isFieldInvalid(pickupAddress)}
+            homeAddress={homeAddress}
+            workAddress={workAddress}
+            historyAddresses={pickupHistory}
+            onChange={(address, rawText) => {
+              setPickupAddress(address?.formatted_address ?? rawText);
+              setPickupPlaceAddress(address);
+            }}
+          />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-body text-contrast">Paradas no percurso</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setStops((prev) => [
+                    ...prev,
+                    {
+                      id:
+                        typeof crypto !== "undefined" && "randomUUID" in crypto
+                          ? crypto.randomUUID()
+                          : `${Date.now()}-${prev.length}`,
+                      label: "",
+                      placeAddress: null,
+                    },
+                  ])
+                }
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-heading font-bold text-dark hover:border-primary hover:text-primary"
+              >
+                + Adicionar parada
+              </button>
+            </div>
+            {stops.map((stop, index) => (
+              <StopAddressField
+                key={stop.id}
+                stop={stop}
+                index={index}
+                onChange={(nextStop) =>
+                  setStops((prev) =>
+                    prev.map((item) => (item.id === stop.id ? nextStop : item))
+                  )
+                }
+                onRemove={() =>
+                  setStops((prev) => prev.filter((item) => item.id !== stop.id))
+                }
+              />
+            ))}
           </div>
 
           {/* Morada de desembarque */}
-          <div>
-            <label className={labelClass}>Morada de desembarque</label>
-            <SearchableSelect
-              options={dropoffPlaces.options}
-              value={dropoffAddress}
-              onChange={(placeId, label) => {
-                setDropoffAddress(label);
-                const requestSeq = ++dropoffDetailsSeqRef.current;
-                setDropoffPlaceAddress({
-                  formatted_address: label,
-                  google_place_id: placeId,
-                });
-                dropoffPlaces.clear();
-                fetchGooglePlaceDetails(placeId, label).then((address) => {
-                  if (requestSeq !== dropoffDetailsSeqRef.current) return;
-                  setDropoffAddress(address.formatted_address);
-                  setDropoffPlaceAddress(address);
-                });
-              }}
-              onSearchChange={(q) => {
-                dropoffDetailsSeqRef.current++;
-                setDropoffAddress(q);
-                setDropoffPlaceAddress(null);
-                dropoffPlaces.search(q);
-              }}
-              placeholder="Ex: Aeroporto Internacional"
-              error={isFieldInvalid(dropoffAddress)}
-              loading={dropoffPlaces.loading}
-            />
-          </div>
+          <AddressAutocompleteWithSuggestions
+            label="Morada de desembarque"
+            placeholder="Ex: Aeroporto Internacional"
+            value={dropoffAddress}
+            error={isFieldInvalid(dropoffAddress)}
+            homeAddress={homeAddress}
+            workAddress={workAddress}
+            historyAddresses={dropoffHistory}
+            onChange={(address, rawText) => {
+              setDropoffAddress(address?.formatted_address ?? rawText);
+              setDropoffPlaceAddress(address);
+            }}
+          />
 
           {/* Data/hora */}
           <div>
@@ -348,7 +478,11 @@ export default function NovaViagemForm({
                 type="number"
                 min={0}
                 value={childrenCount}
-                onChange={(e) => setChildrenCount(Number(e.target.value))}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setChildrenCount(next);
+                  if (next <= 0) setChildrenObservations("");
+                }}
                 className={inputClass}
               />
             </div>
@@ -361,11 +495,47 @@ export default function NovaViagemForm({
                 type="number"
                 min={0}
                 value={luggageCount}
-                onChange={(e) => setLuggageCount(Number(e.target.value))}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setLuggageCount(next);
+                  if (next <= 0) setLuggageObservations("");
+                }}
                 className={inputClass}
               />
             </div>
           </div>
+
+          {childrenCount > 0 && (
+            <div>
+              <label htmlFor="children-observations" className={labelClass}>
+                Observação sobre crianças
+              </label>
+              <textarea
+                id="children-observations"
+                value={childrenObservations}
+                onChange={(e) => setChildrenObservations(e.target.value)}
+                rows={2}
+                placeholder="Ex: 2 crianças, uma de 9 anos e outra de 12"
+                className={inputClass + " resize-none"}
+              />
+            </div>
+          )}
+
+          {luggageCount > 0 && (
+            <div>
+              <label htmlFor="luggage-observations" className={labelClass}>
+                Observação sobre malas
+              </label>
+              <textarea
+                id="luggage-observations"
+                value={luggageObservations}
+                onChange={(e) => setLuggageObservations(e.target.value)}
+                rows={2}
+                placeholder="Ex: duas malas grandes e uma pequena"
+                className={inputClass + " resize-none"}
+              />
+            </div>
+          )}
 
           {/* Forma de pagamento */}
           <div>

@@ -156,7 +156,9 @@ export function awaitingConfirmationNotice(status: ServiceRequestStatus): string
 /**
  * Morada e notas de um serviço. O app Cliente não grava `address_id`: guarda a morada
  * em `observations`. Sem `address_id`, `observations` é a morada (não se repete como
- * nota); com `address_id`, `observations` são notas do pedido.
+ * nota); com `address_id`, `observations` são notas do pedido. Os pedidos criados pelo
+ * admin gravam a morada nos dois sítios (address_id com coordenadas + observations, como o
+ * app Cliente): se `observations` for igual à morada registada, não se repete como nota.
  */
 export function serviceAddress(request: {
   address_id: string | null;
@@ -166,7 +168,10 @@ export function serviceAddress(request: {
   const clean = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
   const observations = clean(request.observations);
   if (request.address_id) {
-    return { address: clean(request.addresses?.formatted_address), notes: observations };
+    const address = clean(request.addresses?.formatted_address);
+    const repeatsAddress =
+      address !== null && observations !== null && address.toLowerCase() === observations.toLowerCase();
+    return { address, notes: repeatsAddress ? null : observations };
   }
   return { address: observations, notes: null };
 }

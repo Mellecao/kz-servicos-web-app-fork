@@ -1,7 +1,9 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
+-- ============================================================================
+-- Migration: 5 RPCs de fluxo Escolha seu Motorista (Subprojeto 2B)
+-- Padrão Flash: SECURITY DEFINER + revoke anon + guards inline + advisory lock.
+-- ============================================================================
 
--- 5 RPCs SECURITY DEFINER (padrão Flash): fluxo Escolha seu Motorista
+-- +goose Up
 
 -- 1) Cliente envia solicitação direta a 1 motorista específico
 CREATE OR REPLACE FUNCTION public.client_send_scheduled_direct_request(

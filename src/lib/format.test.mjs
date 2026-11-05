@@ -8,6 +8,8 @@ import {
   formatDate,
   formatDateTime,
   formatDayMonth,
+  formatTime,
+  formatShortDateTime,
   formatDateLong,
   formatMonthShort,
   formatPhoneAO,
@@ -270,5 +272,24 @@ describe("phoneMatches (pesquisa só por dígitos)", () => {
     assert.equal(phoneMatches("+244923456789", ""), false);
     assert.equal(phoneMatches(null, "9"), false);
     assert.equal(phoneMatches(undefined, "9"), false);
+  });
+});
+
+describe("hora e data curta em Africa/Luanda (chats e notificações)", () => {
+  test("formatTime: HH:mm em 24 h", () => {
+    assert.equal(formatTime("2026-11-05T12:00:00Z"), "13:00");
+    assert.equal(formatTime("2026-11-05T23:30:00Z"), "00:30");
+  });
+
+  test("formatShortDateTime: dd/MM HH:mm, com a virada do dia", () => {
+    assert.equal(formatShortDateTime("2026-11-05T12:00:00Z"), "05/11 13:00");
+    assert.equal(formatShortDateTime("2026-11-05T23:30:00Z"), "06/11 00:30");
+  });
+
+  test("nulos e datas inválidas mostram traço", () => {
+    for (const v of [null, undefined, "", "não é data"]) {
+      assert.equal(formatTime(v), "—");
+      assert.equal(formatShortDateTime(v), "—");
+    }
   });
 });

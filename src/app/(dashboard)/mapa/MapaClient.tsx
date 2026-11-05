@@ -1,0 +1,210 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+import {
+  fetchActiveDrivers,
+  fetchDriverMeta,
+  isDriverLocationStale,
+  type ActiveDriverLocation,
+} from "@/lib/driver-locations";
+import {
+  LUANDA_METRO_BOUNDS,
+  GOOGLE_MAPS_LIBRARIES,
+  assertGoogleMapsApiKey,
+} from "@/lib/google-maps-config";
+import {
+  DRIVER_MAP_COLOR_SCHEME,
+  DRIVER_MAP_STYLES,
+} from "@/lib/driver-map-style";
+import DriverMarker from "@/components/mapa/DriverMarker";
+import DriverPopup from "@/components/mapa/DriverPopup";
+import DriverSearchInput from "@/components/mapa/DriverSearchInput";
+import ActiveDriverCounter from "@/components/mapa/ActiveDriverCounter";
+
+// Ticks a cada 60s pra re-avaliar isStale conforme o tempo passa
+// (sem remover markers — motorista offline vira cinza, não some).
+const STALE_TICK_MS = 60_000;
+const FOCUS_ZOOM = 15;
+
+const MAP_CONTAINER_STYLE: React.CSSProperties = {
+  width: "100%",
+  height: "calc(100vh - 128px)",
+};
+
+export default function MapaClient() {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  assertGoogleMapsApiKey(apiKey);
+
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
+
+  const [drivers, setDrivers] = useState<ActiveDriverLocation[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  // Initial fetch
+  useEffect(() => {
+    let cancelled = false;
+    fetchActiveDrivers()
+      .then((rows) => {
+        if (!cancelled) setDrivers(rows);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Erro ao carregar motoristas");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Realtime subscription
+  useEffect(() => {
+    const upsertDriver = async (driverProfileId: string) => {
+      try {
+        const meta = await fetchDriverMeta(driverProfileId);
+        if (!meta) return;
+        setDrivers((prev) => {
+          const existing = prev.findIndex((d) => d.driverProfileId === driverProfileId);
+          if (existing === -1) return [...prev, meta];
+          const copy = [...prev];
+          copy[existing] = meta;
+          return copy;
+        });
+      } catch {
+        // silent — próximo update tenta de novo
+      }
+    };
+
+    const handler = (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      const newRow = (payload.new ?? {}) as { driver_profile_id?: string };
+      const oldRow = (payload.old ?? {}) as { driver_profile_id?: string };
+
+      if (payload.eventType === "DELETE") {
+        const id = oldRow.driver_profile_id;
+        if (id) setDrivers((prev) => prev.filter((d) => d.driverProfileId !== id));
+        return;
+      }
+      const id = newRow.driver_profile_id;
+      if (id) void upsertDriver(id);
+    };
+
+    const channel = supabase
+      .channel("admin-driver-locations")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "driver_locations" },
+        handler
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Re-avalia isStale a cada 60s sem remover markers.
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), STALE_TICK_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  const activeCount = useMemo(
+    () => drivers.filter((d) => !isDriverLocationStale(d.updatedAt, nowMs)).length,
+    [drivers, nowMs]
+  );
+
+  const selectedDriver = useMemo(
+    () => drivers.find((d) => d.driverProfileId === selectedDriverId) ?? null,
+    [drivers, selectedDriverId]
+  );
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    const bounds = new google.maps.LatLngBounds(
+      { lat: LUANDA_METRO_BOUNDS.south, lng: LUANDA_METRO_BOUNDS.west },
+      { lat: LUANDA_METRO_BOUNDS.north, lng: LUANDA_METRO_BOUNDS.east }
+    );
+    map.fitBounds(bounds);
+  }, []);
+
+  const onSelectFromSearch = useCallback(
+    (driverProfileId: string) => {
+      const d = drivers.find((x) => x.driverProfileId === driverProfileId);
+      if (!d || !mapRef.current) return;
+      mapRef.current.panTo({ lat: d.latitude, lng: d.longitude });
+      mapRef.current.setZoom(FOCUS_ZOOM);
+      setSelectedDriverId(driverProfileId);
+    },
+    [drivers]
+  );
+
+  if (loadError) {
+    return (
+      <div className="p-8 text-red-600">
+        Erro ao carregar Google Maps: {loadError.message}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-dark">Mapa em tempo real</h1>
+          <ActiveDriverCounter count={activeCount} />
+          <p className="text-xs text-contrast mt-1">
+            {drivers.length} motorista{drivers.length === 1 ? "" : "s"} rastreado
+            {drivers.length === 1 ? "" : "s"} · offline em cinza
+          </p>
+        </div>
+        <DriverSearchInput drivers={drivers} onSelect={onSelectFromSearch} />
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
+
+      <div className="rounded-lg overflow-hidden border border-border">
+        {isLoaded ? (
+          <GoogleMap
+            mapContainerStyle={MAP_CONTAINER_STYLE}
+            onLoad={onMapLoad}
+            options={{
+              colorScheme: DRIVER_MAP_COLOR_SCHEME,
+              styles: DRIVER_MAP_STYLES,
+              streetViewControl: false,
+              mapTypeControl: false,
+              fullscreenControl: false,
+            }}
+          >
+            {drivers.map((d) => (
+              <DriverMarker
+                key={d.driverProfileId}
+                driver={d}
+                isStale={isDriverLocationStale(d.updatedAt, nowMs)}
+                onClick={setSelectedDriverId}
+              />
+            ))}
+            {selectedDriver && (
+              <DriverPopup
+                driver={selectedDriver}
+                onClose={() => setSelectedDriverId(null)}
+              />
+            )}
+          </GoogleMap>
+        ) : (
+          <div style={MAP_CONTAINER_STYLE} className="bg-gray-100 flex items-center justify-center text-contrast">
+            A carregar mapa…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

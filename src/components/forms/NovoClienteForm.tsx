@@ -4,9 +4,29 @@ import { useEffect, useState, type FormEvent } from "react";
 import SlidePanel from "@/components/SlidePanel";
 import Modal from "@/components/Modal";
 import { useToast } from "@/components/Toast";
-import { createUser, updateUserById } from "@/lib/api";
+import AddressAutocompleteField from "@/components/AddressAutocompleteField";
+import {
+  createUser,
+  removeUserSavedAddress,
+  saveUserSavedAddress,
+  updateUserById,
+} from "@/lib/api";
+import type { GooglePlaceAddress } from "@/lib/google-places";
+import { extractSavedAddress } from "@/lib/user-saved-addresses";
 import type { User } from "@/types/database";
 import { documentError, documentToSave, formatPhoneAO, maskPhoneAO, phoneError, phoneToSave } from "@/lib/format";
+
+function isSameAddress(
+  a: GooglePlaceAddress | null,
+  b: GooglePlaceAddress | null,
+): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  if (a.google_place_id && b.google_place_id) {
+    return a.google_place_id === b.google_place_id;
+  }
+  return a.formatted_address === b.formatted_address;
+}
 
 interface NovoClienteFormProps {
   open: boolean;
@@ -41,6 +61,12 @@ export default function NovoClienteForm({
   const [cpf, setCpf] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [homeAddress, setHomeAddress] = useState<GooglePlaceAddress | null>(null);
+  const [workAddress, setWorkAddress] = useState<GooglePlaceAddress | null>(null);
+  const [originalHomeAddress, setOriginalHomeAddress] =
+    useState<GooglePlaceAddress | null>(null);
+  const [originalWorkAddress, setOriginalWorkAddress] =
+    useState<GooglePlaceAddress | null>(null);
 
   const isEditing = Boolean(client);
 
@@ -60,6 +86,13 @@ export default function NovoClienteForm({
     setIsActive(client.is_active);
     setCpfError("");
     setEmailError("");
+
+    const home = extractSavedAddress(client, "home");
+    const work = extractSavedAddress(client, "work");
+    setHomeAddress(home);
+    setWorkAddress(work);
+    setOriginalHomeAddress(home);
+    setOriginalWorkAddress(work);
   }, [open, client]);
 
   function resetForm() {
@@ -72,6 +105,10 @@ export default function NovoClienteForm({
     setIsActive(true);
     setCpfError("");
     setEmailError("");
+    setHomeAddress(null);
+    setWorkAddress(null);
+    setOriginalHomeAddress(null);
+    setOriginalWorkAddress(null);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -112,6 +149,21 @@ export default function NovoClienteForm({
           date_of_birth: dateOfBirth || null,
           is_active: isActive,
         });
+
+        if (!isSameAddress(homeAddress, originalHomeAddress)) {
+          if (homeAddress) {
+            await saveUserSavedAddress(client.id, "home", homeAddress);
+          } else {
+            await removeUserSavedAddress(client.id, "home");
+          }
+        }
+        if (!isSameAddress(workAddress, originalWorkAddress)) {
+          if (workAddress) {
+            await saveUserSavedAddress(client.id, "work", workAddress);
+          } else {
+            await removeUserSavedAddress(client.id, "work");
+          }
+        }
       } else {
         await createUser({
           full_name: fullName,
@@ -281,6 +333,23 @@ export default function NovoClienteForm({
           />
           Cliente ativo
         </label>
+      )}
+
+      {isEditing && (
+        <>
+          <AddressAutocompleteField
+            label="Morada Casa"
+            placeholder="Procurar morada"
+            value={homeAddress}
+            onChange={setHomeAddress}
+          />
+          <AddressAutocompleteField
+            label="Morada Trabalho"
+            placeholder="Procurar morada"
+            value={workAddress}
+            onChange={setWorkAddress}
+          />
+        </>
       )}
     </form>
   );

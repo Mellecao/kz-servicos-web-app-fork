@@ -1,5 +1,6 @@
 export type UserRole = "client" | "provider" | "admin";
 export type ProviderStatus = "pending" | "approved" | "rejected" | "suspended";
+export type DriverMetricPeriod = "today" | "week" | "month" | "year";
 export type TripStatus =
   | "open"
   | "under_review"
@@ -11,6 +12,7 @@ export type TripStatus =
   | "started"
   | "finished"
   | "cancelled";
+export type TripType = "standard" | "flash" | "scheduled_quote" | "scheduled_choose_driver";
 export type ServiceRequestStatus =
   | "open"
   | "under_review"
@@ -39,6 +41,7 @@ export interface User {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  user_saved_addresses?: UserSavedAddress[];
 }
 
 export interface ServiceCategory {
@@ -92,6 +95,45 @@ export interface DriverProfile {
   provider_profiles?: ProviderProfile & {
     users?: User;
   };
+  driver_profile_photos?: DriverProfilePhoto[];
+  driver_profile_regions?: DriverProfileRegion[];
+  vehicles?: Vehicle[];
+}
+
+export interface DriverRegion {
+  id: string;
+  name: string;
+  normalized_name: string;
+  created_at: string;
+}
+
+export interface DriverProfileRegion {
+  driver_profile_id: string;
+  region_id: string;
+  created_at: string;
+  driver_regions?: DriverRegion;
+}
+
+export interface DriverProfilePhoto {
+  id: string;
+  driver_profile_id: string;
+  photo_url: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface DriverMetrics {
+  finishedTrips: number;
+  cancelledTrips: number;
+  refusedTrips: number;
+  averageRating: number;
+}
+
+export interface ClientMetrics {
+  finishedTrips: number;
+  cancelledTrips: number;
+  totalSpent: number;
+  averageRating: number;
 }
 
 export interface Vehicle {
@@ -105,8 +147,18 @@ export interface Vehicle {
   vehicle_document_url: string | null;
   passenger_capacity: number;
   is_active: boolean;
+  category: "simple" | "popular" | "luxury" | null;
   created_at: string;
   updated_at: string;
+  vehicle_photos?: VehiclePhoto[];
+}
+
+export interface VehiclePhoto {
+  id: string;
+  vehicle_id: string;
+  photo_url: string;
+  photo_type: string;
+  created_at: string;
 }
 
 export interface Address {
@@ -125,6 +177,59 @@ export interface Address {
   created_at: string;
 }
 
+export type UserSavedAddressLabel = "home" | "work" | "custom";
+
+export interface UserSavedAddress {
+  id: string;
+  user_id: string;
+  address_id: string;
+  label: UserSavedAddressLabel;
+  custom_label: string | null;
+  created_at: string;
+  updated_at: string;
+  addresses?: Address;
+}
+
+export interface TripStop {
+  id: string;
+  trip_id: string;
+  address_id: string;
+  stop_order: number;
+  created_at: string;
+  arrived_at: string | null;
+  resumed_at: string | null;
+  addresses?: Address;
+}
+
+export interface Rating {
+  id: string;
+  trip_id: string | null;
+  service_request_id: string | null;
+  rater_id: string;
+  rated_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  rater?: Pick<User, "id" | "full_name" | "email">;
+  rated?: Pick<User, "id" | "full_name" | "email">;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  type: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  link: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  is_pushed: boolean;
+  pushed_at: string | null;
+  created_at: string;
+}
+
 export interface Trip {
   id: string;
   client_id: string;
@@ -136,12 +241,17 @@ export interface Trip {
   scheduled_datetime: string;
   is_round_trip: boolean;
   return_datetime: string | null;
+  execution_stage: TripExecutionStage | null;
+  current_stop_order: number | null;
+  return_started_at: string | null;
+  return_arrived_at: string | null;
   passenger_count: number;
   children_count: number;
   observations: string | null;
   driver_observations: string | null;
   luggage_count: number;
   status: TripStatus;
+  trip_type: TripType;
   estimated_price: number | null;
   final_price: number | null;
   is_paid: boolean;
@@ -158,17 +268,28 @@ export interface Trip {
   // Relations
   pickup_address?: Address;
   dropoff_address?: Address;
+  trip_stops?: TripStop[];
   service_categories?: ServiceCategory;
   driver_profiles?: DriverProfile;
   vehicles?: Vehicle;
   users?: User;
 }
 
+export type TripExecutionStage =
+  | "to_pickup"
+  | "to_stop"
+  | "waiting_at_stop"
+  | "to_destination"
+  | "waiting_for_return"
+  | "returning"
+  | "finished";
+
 export interface ServiceRequest {
   id: string;
   client_id: string;
   provider_profile_id: string | null;
-  service_category_id: string;
+  service_category_id: string | null;
+  freeform_profession: string | null;
   service_date: string;
   description: string;
   status: ServiceRequestStatus;
@@ -189,6 +310,39 @@ export interface ServiceRequest {
     users?: User;
   };
   users?: User;
+  service_request_photos?: ServiceRequestPhoto[];
+  service_request_provider_candidates?: ServiceRequestProviderCandidate[];
+}
+
+export interface ServiceRequestPhoto {
+  id: string;
+  service_request_id: string;
+  photo_url: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export type ServiceRequestProviderCandidateStatus = "pending" | "accepted" | "rejected";
+
+export interface ServiceRequestProviderCandidate {
+  id: string;
+  service_request_id: string;
+  provider_profile_id: string;
+  status: ServiceRequestProviderCandidateStatus;
+  offered_price: number | null;
+  admin_approved: boolean;
+  price_rejection_reason?: string | null;
+  price_rejected_at?: string | null;
+  kz_proposed_price?: number | null;
+  kz_proposed_at?: string | null;
+  kz_proposal_locked?: boolean;
+  invited_at: string;
+  responded_at: string | null;
+  observations: string | null;
+  created_at: string;
+  provider_profiles?: ProviderProfile & {
+    users?: User;
+  };
 }
 
 export type ServiceCandidateStatus = "pending" | "accepted" | "rejected";
@@ -235,6 +389,11 @@ export interface TripDriverCandidate {
   status: TripDriverCandidateStatus;
   offered_price: number | null;
   admin_approved: boolean;
+  price_rejection_reason?: string | null;
+  price_rejected_at?: string | null;
+  kz_proposed_price?: number | null;
+  kz_proposed_at?: string | null;
+  kz_proposal_locked?: boolean;
   invited_at: string;
   responded_at: string | null;
   observations: string | null;
@@ -245,6 +404,26 @@ export interface TripDriverCandidate {
       users?: User;
     };
   };
+}
+
+export type TripCancellationRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected";
+
+export interface TripCancellationRequest {
+  id: string;
+  trip_id: string;
+  requested_by: string;
+  reason: string;
+  status: TripCancellationRequestStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  requested_by_user?: Pick<User, "id" | "full_name" | "email" | "phone">;
+  reviewed_by_user?: Pick<User, "id" | "full_name" | "email">;
 }
 
 export interface TripStatusHistory {
@@ -258,18 +437,68 @@ export interface TripStatusHistory {
   created_at: string;
 }
 
+export interface DriverTripHistoryEntry {
+  trip: Trip;
+  ratings: Rating[];
+}
+
+export interface ClientTripHistoryEntry {
+  trip: Trip;
+  ratings: Rating[];
+}
+
+export interface SupportConversation {
+  id: string;
+  provider_user_id: string;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  last_sender_id: string | null;
+  unread_admin_count: number;
+  unread_provider_count: number;
+  created_at: string;
+  updated_at: string;
+  provider?: Pick<
+    User,
+    "id" | "full_name" | "email" | "phone" | "avatar_url" | "is_active"
+  >;
+}
+
+export interface SupportMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  message: string;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+  sender?: Pick<User, "id" | "full_name" | "avatar_url" | "role">;
+}
+
 // Supabase Database type for the client
 export interface Database {
   public: {
     Tables: {
       users: { Row: User };
+      user_saved_addresses: { Row: UserSavedAddress };
       service_categories: { Row: ServiceCategory };
       provider_profiles: { Row: ProviderProfile };
       driver_profiles: { Row: DriverProfile };
+      driver_profile_photos: { Row: DriverProfilePhoto };
       vehicles: { Row: Vehicle };
+      vehicle_photos: { Row: VehiclePhoto };
       addresses: { Row: Address };
       trips: { Row: Trip };
+      trip_stops: { Row: TripStop };
+      trip_cancellation_requests: { Row: TripCancellationRequest };
+      support_conversations: { Row: SupportConversation };
+      support_messages: { Row: SupportMessage };
+      ratings: { Row: Rating };
+      notifications: { Row: Notification };
       service_requests: { Row: ServiceRequest };
+      service_request_photos: { Row: ServiceRequestPhoto };
+      service_request_provider_candidates: {
+        Row: ServiceRequestProviderCandidate;
+      };
       admin_logs: { Row: AdminLog };
       products: { Row: Product };
       product_orders: { Row: ProductOrder };

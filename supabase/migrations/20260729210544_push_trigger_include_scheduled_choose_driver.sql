@@ -1,10 +1,13 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
--- Extend trigger_push_on_candidate_insert para reagir tambem quando
+-- ============================================================================
+-- Migration: Extend trigger_push_on_candidate_insert para reagir também quando
 -- trip.status='awaiting_driver_confirmation' (usado em scheduled_choose_driver).
--- Preserva comportamento existente para status='searching_drivers' (Flash/standard).
+-- Preserva comportamento existente para 'searching_drivers' (Flash/standard).
+--
+-- Também passa v_trip.status no payload em vez de hardcode 'pending', pra
+-- edge function saber o contexto real.
+-- ============================================================================
 
+-- +goose Up
 CREATE OR REPLACE FUNCTION public.trigger_push_on_candidate_insert()
 RETURNS trigger
 LANGUAGE plpgsql

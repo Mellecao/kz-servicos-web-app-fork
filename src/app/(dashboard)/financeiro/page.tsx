@@ -131,7 +131,7 @@ function DetalheFinanceiroModal({
       onUpdate({ ...d, pago: next });
     } catch {
       setIsPago(!next);
-      toast("danger", "Erro ao atualizar status de pagamento");
+      toast("danger", "Erro ao atualizar estado de pagamento");
     }
   }
 

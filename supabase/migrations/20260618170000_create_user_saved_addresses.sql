@@ -1,6 +1,3 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
 -- ============================================================================
 -- Migration: Saved client addresses
 -- Description: Stores fixed Home/Work addresses and optional address shortcuts
@@ -28,7 +25,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_saved_addresses_unique_fixed_label
 ALTER TABLE public.user_saved_addresses ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS user_saved_addresses_select ON public.user_saved_addresses;
-
 CREATE POLICY user_saved_addresses_select
 ON public.user_saved_addresses
 FOR SELECT
@@ -38,7 +34,6 @@ USING (
 );
 
 DROP POLICY IF EXISTS user_saved_addresses_insert ON public.user_saved_addresses;
-
 CREATE POLICY user_saved_addresses_insert
 ON public.user_saved_addresses
 FOR INSERT
@@ -48,7 +43,6 @@ WITH CHECK (
 );
 
 DROP POLICY IF EXISTS user_saved_addresses_update ON public.user_saved_addresses;
-
 CREATE POLICY user_saved_addresses_update
 ON public.user_saved_addresses
 FOR UPDATE
@@ -62,7 +56,6 @@ WITH CHECK (
 );
 
 DROP POLICY IF EXISTS user_saved_addresses_delete ON public.user_saved_addresses;
-
 CREATE POLICY user_saved_addresses_delete
 ON public.user_saved_addresses
 FOR DELETE
@@ -73,11 +66,7 @@ USING (
 
 -- +goose Down
 DROP POLICY IF EXISTS user_saved_addresses_delete ON public.user_saved_addresses;
-
 DROP POLICY IF EXISTS user_saved_addresses_update ON public.user_saved_addresses;
-
 DROP POLICY IF EXISTS user_saved_addresses_insert ON public.user_saved_addresses;
-
 DROP POLICY IF EXISTS user_saved_addresses_select ON public.user_saved_addresses;
-
 DROP TABLE IF EXISTS public.user_saved_addresses;

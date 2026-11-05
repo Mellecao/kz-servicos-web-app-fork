@@ -23,6 +23,7 @@ export interface KanbanCard {
   date: string;
   tag?: string;
   tagColor?: string;
+  requiresAttention?: boolean;
 }
 
 export interface KanbanColumn {
@@ -30,52 +31,116 @@ export interface KanbanColumn {
   title: string;
   color: string;
   cards: KanbanCard[];
+  actions?: {
+    label: string;
+    to: string;
+    direction?: "forward" | "back";
+  }[];
 }
 
 interface KanbanBoardProps {
   columns: KanbanColumn[];
   onCardMove?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
   onCardClick?: (cardId: string) => void;
+  canMoveCard?: (fromColumnId: string, toColumnId: string) => boolean;
+  highlightedCardId?: string | null;
 }
 
 // ─── Draggable Card ────────────────────────────────────────
 
 function DraggableCard({
   card,
+  columnId,
+  actions,
   isDragging,
   isHighlighted,
+  isDraggable,
   onClick,
+  onMoveCard,
 }: {
   card: KanbanCard;
+  columnId: string;
+  actions?: KanbanColumn["actions"];
   isDragging: boolean;
   isHighlighted: boolean;
+  isDraggable: boolean;
   onClick?: () => void;
+  onMoveCard?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
 }) {
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: card.id,
   });
+
+  const showAttention = isHighlighted || card.requiresAttention;
 
   const style: React.CSSProperties = {
     ...(transform
       ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
       : {}),
+    ...(isDraggable ? {} : { touchAction: "pan-x" }),
     ...(isDragging ? { opacity: 0.4, scale: "0.98" } : {}),
     ...(isHighlighted
       ? { animation: "card-highlight 0.8s ease-in-out 3" }
       : {}),
   };
 
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "touch") return;
+    touchStartRef.current = { x: event.clientX, y: event.clientY };
+    suppressClickRef.current = false;
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "touch" || !touchStartRef.current) return;
+    const dx = Math.abs(event.clientX - touchStartRef.current.x);
+    const dy = Math.abs(event.clientY - touchStartRef.current.y);
+    if (dx > 10 || dy > 10) {
+      suppressClickRef.current = true;
+    }
+  }
+
+  function handlePointerUp() {
+    touchStartRef.current = null;
+  }
+
+  function handleClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!suppressClickRef.current) {
+      onClick?.();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClickRef.current = false;
+  }
+
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
-      {...attributes}
+      {...(isDraggable ? listeners : {})}
+      {...(isDraggable ? attributes : {})}
       style={style}
-      onClick={onClick}
-      className={`bg-background/60 rounded-lg p-3.5 border border-border hover:border-primary/40 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
-        isHighlighted ? "ring-2 ring-primary/60" : ""
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onClick={handleClick}
+      data-card-id={card.id}
+      className={`relative bg-background/60 rounded-lg p-3.5 border hover:shadow-md transition-all duration-200 select-none ${
+        isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+      } ${
+        showAttention
+          ? "border-danger ring-2 ring-danger/70 shadow-lg shadow-danger/10"
+          : "border-border hover:border-primary/40"
       }`}
     >
+      {showAttention && (
+        <span className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-danger text-xs font-black text-white shadow-md">
+          !
+        </span>
+      )}
       <p className="text-sm font-medium text-dark leading-snug">{card.title}</p>
       <p className="text-xs text-contrast mt-1">{card.subtitle}</p>
       <div className="flex items-center justify-between mt-2.5">
@@ -92,6 +157,22 @@ function DraggableCard({
           </span>
         )}
       </div>
+      {actions
+        ?.filter((action) => action.direction !== "back")
+        .map((action) => (
+          <button
+            key={`${card.id}-${action.to}`}
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveCard?.(card.id, columnId, action.to);
+            }}
+            className="mt-3 w-full rounded-lg border border-primary bg-primary px-3 py-2 text-xs font-heading font-bold text-on-primary transition-colors hover:bg-primary-dark cursor-pointer"
+          >
+            Avançar etapa
+          </button>
+        ))}
     </div>
   );
 }
@@ -132,14 +213,18 @@ function DroppableColumn({
   isOver,
   activeCardId,
   highlightedCardId,
+  isDraggable,
   onCardClick,
+  onMoveCard,
 }: {
   column: KanbanColumn;
   isValidTarget: boolean;
   isOver: boolean;
   activeCardId: string | null;
   highlightedCardId: string | null;
+  isDraggable: boolean;
   onCardClick?: (cardId: string) => void;
+  onMoveCard?: (cardId: string, fromColumnId: string, toColumnId: string) => void;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
@@ -185,9 +270,13 @@ function DroppableColumn({
             <DraggableCard
               key={card.id}
               card={card}
+              columnId={column.id}
+              actions={column.actions}
               isDragging={activeCardId === card.id}
               isHighlighted={highlightedCardId === card.id}
+              isDraggable={isDraggable}
               onClick={() => onCardClick?.(card.id)}
+              onMoveCard={onMoveCard}
             />
           ))
         )}
@@ -211,15 +300,26 @@ export default function KanbanBoard({
   columns,
   onCardMove,
   onCardClick,
+  canMoveCard,
+  highlightedCardId: externalHighlightedCardId = null,
 }: KanbanBoardProps) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [highlightedCardId, setHighlightedCardId] = useState<string | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
 
   // Find card and its column
   const findCardColumn = useCallback(
@@ -243,14 +343,15 @@ export default function KanbanBoard({
     [columns]
   );
 
-  // Check if target column is the next one
-  const isNextColumn = useCallback(
+  // Check if target column is allowed.
+  const isAllowedMove = useCallback(
     (fromColId: string, toColId: string) => {
+      if (canMoveCard) return canMoveCard(fromColId, toColId);
       const fromIdx = columns.findIndex((c) => c.id === fromColId);
       const toIdx = columns.findIndex((c) => c.id === toColId);
       return toIdx === fromIdx + 1;
     },
-    [columns]
+    [canMoveCard, columns]
   );
 
   function handleDragStart(event: DragStartEvent) {
@@ -279,7 +380,7 @@ export default function KanbanBoard({
     const sourceCol = findCardColumn(cardId);
     if (!sourceCol) return;
     if (sourceCol.id === targetColId) return;
-    if (!isNextColumn(sourceCol.id, targetColId)) return;
+    if (!isAllowedMove(sourceCol.id, targetColId)) return;
 
     // Trigger the move
     onCardMove(cardId, sourceCol.id, targetColId);
@@ -309,7 +410,7 @@ export default function KanbanBoard({
 
   return (
     <DndContext
-      sensors={sensors}
+      sensors={isDesktop ? sensors : []}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -318,7 +419,7 @@ export default function KanbanBoard({
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[calc(100vh-12rem)]">
         {columns.map((column) => {
           const isValid = sourceColumn
-            ? isNextColumn(sourceColumn.id, column.id)
+            ? isAllowedMove(sourceColumn.id, column.id)
             : false;
 
           return (
@@ -328,8 +429,10 @@ export default function KanbanBoard({
               isValidTarget={isValid}
               isOver={overColumnId === column.id}
               activeCardId={activeCardId}
-              highlightedCardId={highlightedCardId}
+              highlightedCardId={externalHighlightedCardId ?? highlightedCardId}
+              isDraggable={isDesktop}
               onCardClick={onCardClick}
+              onMoveCard={onCardMove}
             />
           );
         })}

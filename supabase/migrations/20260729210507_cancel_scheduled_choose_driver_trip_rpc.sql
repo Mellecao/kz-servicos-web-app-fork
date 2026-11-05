@@ -1,6 +1,9 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
+-- ============================================================================
+-- Migration: cancel_scheduled_choose_driver_trip
+-- Aceita cancelamento pelo cliente dono OU admin. Reject candidate + trip cancelled.
+-- ============================================================================
 
+-- +goose Up
 CREATE OR REPLACE FUNCTION public.cancel_scheduled_choose_driver_trip(
   p_trip_id uuid,
   p_reason text

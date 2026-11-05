@@ -1,6 +1,3 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
 -- ============================================================================
 -- Migration: Repair media/stops/proposals schema drift
 -- Description: The remote migration history contained
@@ -25,7 +22,6 @@ CREATE INDEX IF NOT EXISTS idx_trip_stops_trip_id_order
   ON public.trip_stops(trip_id, stop_order);
 
 DROP POLICY IF EXISTS trip_stops_select ON public.trip_stops;
-
 CREATE POLICY trip_stops_select
 ON public.trip_stops
 FOR SELECT
@@ -50,7 +46,6 @@ USING (
 );
 
 DROP POLICY IF EXISTS trip_stops_insert ON public.trip_stops;
-
 CREATE POLICY trip_stops_insert
 ON public.trip_stops
 FOR INSERT
@@ -115,7 +110,5 @@ ALTER TABLE public.trip_driver_candidates
   DROP COLUMN IF EXISTS price_rejection_reason;
 
 DROP POLICY IF EXISTS trip_stops_insert ON public.trip_stops;
-
 DROP POLICY IF EXISTS trip_stops_select ON public.trip_stops;
-
 DROP TABLE IF EXISTS public.trip_stops;

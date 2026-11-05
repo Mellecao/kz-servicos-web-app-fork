@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       service_category_id,
       pickup_address,
       dropoff_address,
+      stops,
       scheduled_datetime,
       is_round_trip,
       return_datetime,
@@ -38,6 +39,16 @@ export async function POST(request: NextRequest) {
 
     const pickupAddress = normalizeAddressInput(pickup_address);
     const dropoffAddress = normalizeAddressInput(dropoff_address);
+    const normalizedStops = Array.isArray(stops)
+      ? stops.reduce<NonNullable<ReturnType<typeof normalizeAddressInput>>[]>(
+          (acc, stop) => {
+            const normalizedStop = normalizeAddressInput(stop);
+            if (normalizedStop) acc.push(normalizedStop);
+            return acc;
+          },
+          []
+        )
+      : [];
 
     if (!client_id || !pickupAddress || !dropoffAddress || !scheduled_datetime) {
       return NextResponse.json(
@@ -56,6 +67,20 @@ export async function POST(request: NextRequest) {
     }
     if (dropoffResult.error) {
       return NextResponse.json({ error: dropoffResult.error.message }, { status: 400 });
+    }
+
+    // Create stop addresses before the trip so a failure here leaves no orphan trip
+    const stopAddressIds: string[] = [];
+    for (const stopAddress of normalizedStops) {
+      const { data: addressData, error: addressError } = await admin
+        .from("addresses")
+        .insert(stopAddress)
+        .select("id")
+        .single();
+      if (addressError) {
+        return NextResponse.json({ error: addressError.message }, { status: 400 });
+      }
+      stopAddressIds.push(addressData.id);
     }
 
     const { data, error } = await admin
@@ -82,7 +107,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    if (stopAddressIds.length > 0) {
+      const stopRows = stopAddressIds.map((addressId, index) => ({
+        trip_id: data.id,
+        address_id: addressId,
+        stop_order: index + 1,
+      }));
+
+      const { error: stopsError } = await admin.from("trip_stops").insert(stopRows);
+      if (stopsError) {
+        // Rollback: remove the trip so the user doesn't see a half-created record
+        await admin.from("trips").delete().eq("id", data.id);
+        return NextResponse.json({ error: stopsError.message }, { status: 400 });
+      }
+    }
+
     return NextResponse.json(data, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const admin = getSupabaseAdmin();
+    const authHeader = request.headers.get("authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+    if (!token) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    if (authError || !authData.user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const { data: userData, error: userError } = await admin
+      .from("users")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+    if (userError || userData?.role !== "admin") {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
+
+    const tripId = request.nextUrl.searchParams.get("id")?.trim();
+    if (!tripId) {
+      return NextResponse.json({ error: "ID da viagem é obrigatório" }, { status: 400 });
+    }
+
+    const { data: trip, error: tripError } = await admin
+      .from("trips")
+      .select("status")
+      .eq("id", tripId)
+      .single();
+    if (tripError) {
+      return NextResponse.json({ error: tripError.message }, { status: 400 });
+    }
+    if (trip?.status !== "cancelled") {
+      return NextResponse.json(
+        { error: "Somente viagens canceladas podem ser excluídas" },
+        { status: 409 }
+      );
+    }
+
+    const { error } = await admin.from("trips").delete().eq("id", tripId);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
   }

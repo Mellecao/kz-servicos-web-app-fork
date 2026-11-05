@@ -1,6 +1,3 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
 -- ============================================================================
 -- Migration: Create admin_logs table
 -- Description: Test sem seção Down para verificar se a hipótese de goose
@@ -30,13 +27,10 @@ CREATE POLICY "admin_logs_insert" ON public.admin_logs
   WITH CHECK (public.get_user_role() = 'admin'::user_role);
 
 CREATE INDEX idx_admin_logs_created_at ON public.admin_logs (created_at DESC);
-
 CREATE INDEX idx_admin_logs_admin_id   ON public.admin_logs (admin_id);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.admin_logs TO authenticated;
-
 GRANT SELECT ON TABLE public.admin_logs TO anon;
-
 GRANT ALL ON TABLE public.admin_logs TO service_role;
 
 NOTIFY pgrst, 'reload schema';

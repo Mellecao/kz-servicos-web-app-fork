@@ -9,9 +9,14 @@ import {
   createDriverProfile,
   createVehicle,
   fetchServiceCategories,
+  fetchVehiclesByDriver,
+  fetchDriverRegions,
+  createDriverRegion,
+  replaceDriverProfileRegions,
   updateDriverById,
 } from "@/lib/api";
-import type { DriverProfile, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
+import { supabase } from "@/lib/supabase";
+import type { DriverProfile, DriverRegion, ProviderStatus, ServiceCategory, Vehicle } from "@/types/database";
 import { documentError, documentToSave, formatPhoneAO, maskPhoneAO, phoneError, phoneToSave } from "@/lib/format";
 
 interface NovoMotoristaFormProps {
@@ -68,6 +73,14 @@ export default function NovoMotoristaForm({
   const [color, setColor] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
   const [passengerCapacity, setPassengerCapacity] = useState("");
+  const [vehicleCategory, setVehicleCategory] = useState<"" | "simple" | "popular" | "luxury">("");
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [driverPhotoFiles, setDriverPhotoFiles] = useState<File[]>([]);
+  const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
+  const [availableRegions, setAvailableRegions] = useState<DriverRegion[]>([]);
+  const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
+  const [regionInput, setRegionInput] = useState("");
+  const [addingRegion, setAddingRegion] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -95,8 +108,23 @@ export default function NovoMotoristaForm({
     setColor(vehicle?.color ?? "");
     setLicensePlate(vehicle?.license_plate ?? "");
     setPassengerCapacity(vehicle?.passenger_capacity ? String(vehicle.passenger_capacity) : "");
+    setVehicleCategory(vehicle?.category ?? "");
+    setProfilePhotoFile(null);
+    setDriverPhotoFiles([]);
+    setVehiclePhotoFiles([]);
+    setSelectedRegionIds(
+      driver.driver_profile_regions?.map((item) => item.region_id) ?? [],
+    );
+    setRegionInput("");
     setEmailError("");
   }, [open, driver]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchDriverRegions().then(setAvailableRegions).catch(() => {
+      setAvailableRegions([]);
+    });
+  }, [open]);
 
   function resetForm() {
     setFullName("");
@@ -115,7 +143,90 @@ export default function NovoMotoristaForm({
     setColor("");
     setLicensePlate("");
     setPassengerCapacity("");
+    setVehicleCategory("");
+    setProfilePhotoFile(null);
+    setDriverPhotoFiles([]);
+    setVehiclePhotoFiles([]);
+    setSelectedRegionIds([]);
+    setRegionInput("");
     setEmailError("");
+  }
+
+  async function uploadProfilePhoto(userId: string) {
+    if (!profilePhotoFile) return;
+    const ext = profilePhotoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${userId}/profile-${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("Profile_Images")
+      .upload(path, profilePhotoFile, { upsert: true });
+    if (uploadError) throw uploadError;
+    const publicUrl = `${supabase.storage.from("Profile_Images").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ avatar_url: publicUrl })
+      .eq("id", userId);
+    if (updateError) throw updateError;
+  }
+
+  async function uploadVehiclePhotos(vehicleId: string) {
+    if (vehiclePhotoFiles.length === 0) return;
+    for (const file of vehiclePhotoFiles) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${vehicleId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("Vehicle_Photos")
+        .upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const publicUrl = supabase.storage.from("Vehicle_Photos").getPublicUrl(path).data.publicUrl;
+      const { error: insertError } = await supabase.from("vehicle_photos").insert({
+        vehicle_id: vehicleId,
+        photo_url: publicUrl,
+        photo_type: "front",
+      });
+      if (insertError) throw insertError;
+    }
+  }
+
+  async function uploadDriverPhotos(driverProfileId: string) {
+    if (driverPhotoFiles.length === 0) return;
+    for (const file of driverPhotoFiles) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `drivers/${driverProfileId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("Profile_Images")
+        .upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const publicUrl = supabase.storage.from("Profile_Images").getPublicUrl(path).data.publicUrl;
+      const { error: insertError } = await supabase.from("driver_profile_photos").insert({
+        driver_profile_id: driverProfileId,
+        photo_url: publicUrl,
+      });
+      if (insertError) throw insertError;
+    }
+  }
+
+  async function handleAddRegion() {
+    const cleanInput = regionInput.trim();
+    if (!cleanInput || addingRegion) return;
+    const existing = availableRegions.find(
+      (region) => region.normalized_name === cleanInput.toLowerCase().replace(/\s+/g, " "),
+    );
+    if (existing) {
+      setSelectedRegionIds((current) => current.includes(existing.id) ? current : [...current, existing.id]);
+      setRegionInput("");
+      return;
+    }
+    setAddingRegion(true);
+    try {
+      const region = await createDriverRegion(cleanInput);
+      setAvailableRegions((current) => [...current.filter((item) => item.id !== region.id), region].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedRegionIds((current) => current.includes(region.id) ? current : [...current, region.id]);
+      setRegionInput("");
+    } catch {
+      toast("danger", "Não foi possível registar a região");
+    } finally {
+      setAddingRegion(false);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -199,8 +310,18 @@ export default function NovoMotoristaForm({
             color: color || null,
             license_plate: licensePlate || null,
             passenger_capacity: passengerCapacity || null,
+            category: vehicleCategory || null,
           },
         });
+        await replaceDriverProfileRegions(driver.id, selectedRegionIds);
+        await uploadProfilePhoto(userId);
+        await uploadDriverPhotos(driver.id);
+        if (vehiclePhotoFiles.length > 0) {
+          const vehicleId =
+            driver.vehicle?.id ??
+            (await fetchVehiclesByDriver(driver.id)).find((v) => v.is_active)?.id;
+          if (vehicleId) await uploadVehiclePhotos(vehicleId);
+        }
       } else {
         // 1. Create user
         const user = await createUser({
@@ -235,10 +356,14 @@ export default function NovoMotoristaForm({
           cnh_expiration_date: cnhExpiration || null,
           is_available: true,
         });
+        await replaceDriverProfileRegions(driverProfile.id, selectedRegionIds);
 
         // 5. Create vehicle if any field is filled
+        await uploadProfilePhoto(user.id);
+        await uploadDriverPhotos(driverProfile.id);
+
         if (hasVehicle) {
-          await createVehicle({
+          const vehicle = await createVehicle({
             driver_profile_id: driverProfile.id,
             brand,
             model,
@@ -246,7 +371,9 @@ export default function NovoMotoristaForm({
             color,
             license_plate: licensePlate,
             passenger_capacity: Number(passengerCapacity) || 4,
+            category: vehicleCategory || null,
           });
+          await uploadVehiclePhotos(vehicle.id);
         }
       }
 
@@ -413,6 +540,95 @@ export default function NovoMotoristaForm({
           />
         </div>
 
+        <div>
+          <label htmlFor="driver-profile-photo" className={labelClass}>
+            Foto de perfil
+          </label>
+          <input
+            id="driver-profile-photo"
+            type="file"
+            accept="image/*"
+            onChange={(e) => setProfilePhotoFile(e.target.files?.[0] ?? null)}
+            className={inputClass}
+          />
+          {profilePhotoFile && (
+            <p className="mt-1 text-xs text-contrast font-body">
+              {profilePhotoFile.name}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="driver-public-photos" className={labelClass}>
+            Fotos públicas do motorista
+          </label>
+          <input
+            id="driver-public-photos"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) =>
+              setDriverPhotoFiles(Array.from(e.target.files ?? []))
+            }
+            className={inputClass}
+          />
+          {driverPhotoFiles.length > 0 && (
+            <p className="mt-1 text-xs text-contrast font-body">
+              {driverPhotoFiles.length} foto(s) selecionada(s)
+            </p>
+          )}
+        </div>
+
+        <div className="border-t border-border pt-4 mt-2" />
+        <h3 className={sectionClass}>Regiões de atuação</h3>
+        <div>
+          <label htmlFor="driver-region" className={labelClass}>Região</label>
+          <div className="flex gap-2">
+            <input
+              id="driver-region"
+              list="driver-region-options"
+              value={regionInput}
+              onChange={(e) => setRegionInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleAddRegion();
+                }
+              }}
+              placeholder="Ex: Talatona, Viana, Cazenga"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => void handleAddRegion()}
+              disabled={!regionInput.trim() || addingRegion}
+              className="shrink-0 rounded-lg bg-primary px-3 text-sm font-heading font-bold text-on-primary disabled:opacity-50"
+            >
+              {addingRegion ? "..." : "Adicionar"}
+            </button>
+          </div>
+          <datalist id="driver-region-options">
+            {availableRegions.map((region) => <option key={region.id} value={region.name} />)}
+          </datalist>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {selectedRegionIds.map((regionId) => {
+              const region = availableRegions.find((item) => item.id === regionId);
+              if (!region) return null;
+              return (
+                <button
+                  key={region.id}
+                  type="button"
+                  onClick={() => setSelectedRegionIds((current) => current.filter((id) => id !== region.id))}
+                  className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-body text-primary hover:bg-danger/10 hover:text-danger"
+                  title="Remover região"
+                >
+                  {region.name} ×
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Section: carta de condução (colunas cnh_*) */}
         <div className="border-t border-border pt-4 mt-2" />
         <h3 className={sectionClass}>Carta de condução</h3>
@@ -552,6 +768,37 @@ export default function NovoMotoristaForm({
               className={inputClass}
             />
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="vehicle-category" className={labelClass}>Categoria do carro</label>
+          <select id="vehicle-category" value={vehicleCategory} onChange={(e) => setVehicleCategory(e.target.value as "" | "simple" | "popular" | "luxury")} className={inputClass}>
+            <option value="">Não definida</option>
+            <option value="simple">Simples</option>
+            <option value="popular">Popular</option>
+            <option value="luxury">Luxo</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="vehicle-photos" className={labelClass}>
+            Fotos do carro
+          </label>
+          <input
+            id="vehicle-photos"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) =>
+              setVehiclePhotoFiles(Array.from(e.target.files ?? []))
+            }
+            className={inputClass}
+          />
+          {vehiclePhotoFiles.length > 0 && (
+            <p className="mt-1 text-xs text-contrast font-body">
+              {vehiclePhotoFiles.length} foto(s) selecionada(s)
+            </p>
+          )}
         </div>
 
       </form>

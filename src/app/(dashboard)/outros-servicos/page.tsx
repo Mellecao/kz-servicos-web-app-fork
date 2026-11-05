@@ -6,7 +6,9 @@ import KanbanListView, { type KanbanListColumn } from "@/components/KanbanListVi
 import ServiceDetailModal from "@/components/ServiceDetailModal";
 import NovaSolicitacaoForm from "@/components/forms/NovaSolicitacaoForm";
 import { useToast } from "@/components/Toast";
+import { supabase } from "@/lib/supabase";
 import { fetchServiceRequests, updateServiceRequestStatus } from "@/lib/api";
+import { isServiceAdminActionRequired } from "@/lib/service-status";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/database";
 import { formatDateTime } from "@/lib/format";
 import { SERVICE_STATUS_COLORS } from "@/lib/service-request-colors";
@@ -36,12 +38,29 @@ export default function OutrosServicosPage() {
   const loadRequests = useCallback(() => {
     fetchServiceRequests()
       .then(setRequests)
-      .catch(() => toast("danger", "Não foi possível carregar os serviços."))
+      .catch((error) => {
+        console.error("[outros-servicos] fetchServiceRequests error:", error);
+        toast("danger", "Não foi possível carregar os serviços.");
+      })
       .finally(() => setLoading(false));
   }, [toast]);
 
   useEffect(() => {
     loadRequests();
+  }, [loadRequests]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("outros-servicos-board")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "service_requests" },
+        () => loadRequests(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadRequests]);
 
   const handleCardMove = useCallback(
@@ -81,10 +100,13 @@ export default function OutrosServicosPage() {
         title: r.description.length > 50 ? r.description.slice(0, 50) + "…" : r.description,
         subtitle: r.users?.full_name ?? "—",
         date: formatDateTime(r.service_date),
-        ...(r.service_categories
+        ...(r.freeform_profession
+          ? { tag: `👤 ${r.freeform_profession}`, tagColor: "#8B5CF6" }
+          : r.service_categories
           ? { tag: r.service_categories.name, tagColor: "#2261FE" }
           : {}),
         ...(r.is_paid ? { tag: "Pago", tagColor: "#22c55e" } : {}),
+        requiresAttention: isServiceAdminActionRequired(r.status),
       })),
     };
   });

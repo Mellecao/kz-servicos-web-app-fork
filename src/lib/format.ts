@@ -91,6 +91,22 @@ export function formatDayMonth(input: DateInput): string {
   return `${p.day}/${p.month}`;
 }
 
+/** "13:00" */
+export function formatTime(input: DateInput): string {
+  const date = toDate(input);
+  if (!date) return EMPTY;
+  const p = partsOf(date);
+  return `${p.hour}:${p.minute}`;
+}
+
+/** "05/11 13:00" (sem ano; chats e notificações) */
+export function formatShortDateTime(input: DateInput): string {
+  const date = toDate(input);
+  if (!date) return EMPTY;
+  const p = partsOf(date);
+  return `${p.day}/${p.month} ${p.hour}:${p.minute}`;
+}
+
 /** "quinta-feira, 5 de novembro de 2026" */
 export function formatDateLong(input: DateInput): string {
   const date = toDate(input);

@@ -1,6 +1,3 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
 -- ============================================================================
 -- Migration: Driver profile photos
 -- Description: Additional public driver photos shown in client driver details.
@@ -21,14 +18,12 @@ CREATE INDEX IF NOT EXISTS idx_driver_profile_photos_driver_profile_id
   ON public.driver_profile_photos(driver_profile_id, sort_order, created_at);
 
 DROP POLICY IF EXISTS driver_profile_photos_select ON public.driver_profile_photos;
-
 CREATE POLICY driver_profile_photos_select
 ON public.driver_profile_photos
 FOR SELECT
 USING (true);
 
 DROP POLICY IF EXISTS driver_profile_photos_insert ON public.driver_profile_photos;
-
 CREATE POLICY driver_profile_photos_insert
 ON public.driver_profile_photos
 FOR INSERT
@@ -44,7 +39,6 @@ WITH CHECK (
 );
 
 DROP POLICY IF EXISTS driver_profile_photos_delete ON public.driver_profile_photos;
-
 CREATE POLICY driver_profile_photos_delete
 ON public.driver_profile_photos
 FOR DELETE
@@ -61,9 +55,6 @@ USING (
 
 -- +goose Down
 DROP POLICY IF EXISTS driver_profile_photos_delete ON public.driver_profile_photos;
-
 DROP POLICY IF EXISTS driver_profile_photos_insert ON public.driver_profile_photos;
-
 DROP POLICY IF EXISTS driver_profile_photos_select ON public.driver_profile_photos;
-
 DROP TABLE IF EXISTS public.driver_profile_photos;

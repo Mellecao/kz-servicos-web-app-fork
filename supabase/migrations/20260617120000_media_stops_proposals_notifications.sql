@@ -1,6 +1,3 @@
--- Exportado do histórico remoto (supabase_migrations.schema_migrations) em 2026-11-05.
--- Snapshot de referência do que está aplicado em produção; não garante replay limpo.
-
 -- +goose Up
 
 -- Public media buckets used by all three apps.
@@ -27,14 +24,12 @@ SET
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 DROP POLICY IF EXISTS profile_images_public_read ON storage.objects;
-
 CREATE POLICY profile_images_public_read
 ON storage.objects
 FOR SELECT
 USING (bucket_id = 'Profile_Images');
 
 DROP POLICY IF EXISTS profile_images_authenticated_insert ON storage.objects;
-
 CREATE POLICY profile_images_authenticated_insert
 ON storage.objects
 FOR INSERT
@@ -42,7 +37,6 @@ TO authenticated
 WITH CHECK (bucket_id = 'Profile_Images');
 
 DROP POLICY IF EXISTS profile_images_owner_or_admin_update ON storage.objects;
-
 CREATE POLICY profile_images_owner_or_admin_update
 ON storage.objects
 FOR UPDATE
@@ -57,14 +51,12 @@ USING (
 WITH CHECK (bucket_id = 'Profile_Images');
 
 DROP POLICY IF EXISTS vehicle_photos_public_read ON storage.objects;
-
 CREATE POLICY vehicle_photos_public_read
 ON storage.objects
 FOR SELECT
 USING (bucket_id = 'Vehicle_Photos');
 
 DROP POLICY IF EXISTS vehicle_photos_authenticated_insert ON storage.objects;
-
 CREATE POLICY vehicle_photos_authenticated_insert
 ON storage.objects
 FOR INSERT
@@ -72,7 +64,6 @@ TO authenticated
 WITH CHECK (bucket_id = 'Vehicle_Photos');
 
 DROP POLICY IF EXISTS vehicle_photos_owner_or_admin_update ON storage.objects;
-
 CREATE POLICY vehicle_photos_owner_or_admin_update
 ON storage.objects
 FOR UPDATE
@@ -102,7 +93,6 @@ CREATE INDEX IF NOT EXISTS idx_trip_stops_trip_id_order
   ON public.trip_stops(trip_id, stop_order);
 
 DROP POLICY IF EXISTS trip_stops_select ON public.trip_stops;
-
 CREATE POLICY trip_stops_select
 ON public.trip_stops
 FOR SELECT
@@ -127,7 +117,6 @@ USING (
 );
 
 DROP POLICY IF EXISTS trip_stops_insert ON public.trip_stops;
-
 CREATE POLICY trip_stops_insert
 ON public.trip_stops
 FOR INSERT
@@ -179,9 +168,7 @@ DELETE FROM public.service_categories
 WHERE slug IN ('gestao-de-obra', 'churrasqueiro');
 
 DROP POLICY IF EXISTS trip_stops_insert ON public.trip_stops;
-
 DROP POLICY IF EXISTS trip_stops_select ON public.trip_stops;
-
 DROP TABLE IF EXISTS public.trip_stops;
 
 ALTER TABLE public.trip_driver_candidates
@@ -200,13 +187,8 @@ ALTER TABLE public.users
   DROP COLUMN IF EXISTS fcm_token;
 
 DROP POLICY IF EXISTS vehicle_photos_owner_or_admin_update ON storage.objects;
-
 DROP POLICY IF EXISTS vehicle_photos_authenticated_insert ON storage.objects;
-
 DROP POLICY IF EXISTS vehicle_photos_public_read ON storage.objects;
-
 DROP POLICY IF EXISTS profile_images_owner_or_admin_update ON storage.objects;
-
 DROP POLICY IF EXISTS profile_images_authenticated_insert ON storage.objects;
-
 DROP POLICY IF EXISTS profile_images_public_read ON storage.objects;
