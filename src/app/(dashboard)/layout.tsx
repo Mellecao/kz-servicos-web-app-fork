@@ -5,6 +5,7 @@ import OneSignalInitializer from "@/components/OneSignalInitializer";
 import AdminNotificationsButton from "@/components/AdminNotificationsButton";
 import MobilePushPermissionGuide from "@/components/MobilePushPermissionGuide";
 import RequireAuth from "@/components/RequireAuth";
+import TripsOnlyGate from "@/components/TripsOnlyGate";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/Toast";
 import { TripsEnabledProvider } from "@/lib/trips-enabled-context";
@@ -26,7 +27,7 @@ export default function DashboardLayout({
             <MobileHeader />
             <Sidebar />
             <div className="min-w-0 pl-0 md:pl-64">
-              <main className="min-w-0 overflow-x-clip p-4 md:p-8 pb-24 md:pb-8">{children}</main>
+              <main className="min-w-0 overflow-x-clip p-4 md:p-8 pb-24 md:pb-8"><TripsOnlyGate>{children}</TripsOnlyGate></main>
             </div>
             <MobileNav />
           </div>

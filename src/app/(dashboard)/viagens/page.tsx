@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import KanbanBoard from "@/components/KanbanBoard";
 import KanbanListView, {
   type KanbanListColumn,
@@ -35,8 +35,6 @@ import { FlashBadge } from "@/components/FlashBadge";
 import type { Trip, TripDriverCandidate, TripStatus, TripType } from "@/types/database";
 import { BRAND } from "@/lib/brand";
 import { formatDateTime } from "@/lib/format";
-import { tripsRedirectTarget } from "@/lib/trips-enabled";
-import { useTripsEnabled } from "@/lib/trips-enabled-context";
 
 type TripTypeFilter = "all" | TripType;
 
@@ -78,7 +76,7 @@ function getCandidateDriverNames(candidates: TripDriverCandidate[]) {
     .join(", ");
 }
 
-function ViagensContent() {
+export default function ViagensPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const openedTripFromUrlRef = useRef<string | null>(null);
@@ -464,25 +462,4 @@ function ViagensContent() {
       />
     </div>
   );
-}
-
-/**
- * Porta de entrada de /viagens: a página fica intacta, mas só se mostra com o interruptor
- * trips_enabled ligado. Desligado, redireciona para os serviços; enquanto o valor não é
- * lido não se mostra nem se redireciona nada (sem piscadelas).
- */
-export default function ViagensPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { tripsEnabled, loading } = useTripsEnabled();
-  const target = loading ? null : tripsRedirectTarget(pathname, tripsEnabled);
-
-  useEffect(() => {
-    if (target) router.replace(target);
-  }, [target, router]);
-
-  if (loading || !tripsEnabled) {
-    return <div className="text-center py-16 text-contrast text-sm">A carregar…</div>;
-  }
-  return <ViagensContent />;
 }

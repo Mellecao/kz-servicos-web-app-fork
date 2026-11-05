@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   TRIPS_ENABLED_KEY,
   TRIPS_REDIRECT_PATH,
+  TRIPS_ONLY_PATHS,
   parseTripsEnabled,
   isTripsPath,
   tripsRedirectTarget,
@@ -29,24 +30,49 @@ describe("parseTripsEnabled (jsonb → boolean, à prova de falha)", () => {
   });
 });
 
-describe("isTripsPath", () => {
-  test("/viagens e tudo por baixo dela", () => {
-    for (const p of ["/viagens", "/viagens/", "/viagens/abc", "/viagens?x=1", "/viagens#topo"]) {
+describe("isTripsPath (páginas que só existem com as caronas ligadas)", () => {
+  test("a lista de páginas só de caronas é viagens, mapa e motoristas", () => {
+    assert.deepEqual([...TRIPS_ONLY_PATHS], ["/viagens", "/mapa", "/motoristas"]);
+  });
+
+  test("/viagens, /mapa, /motoristas e tudo por baixo deles", () => {
+    for (const p of [
+      "/viagens", "/viagens/", "/viagens/abc", "/viagens?x=1", "/viagens#topo",
+      "/mapa", "/mapa/", "/mapa?driver=1",
+      "/motoristas", "/motoristas/abc", "/motoristas#topo",
+    ]) {
       assert.equal(isTripsPath(p), true, p);
     }
   });
 
-  test("não apanha caminhos parecidos nem outras páginas", () => {
-    for (const p of ["/viagens-futuro", "/viagensx", "/outros-servicos", "/", "/dashboard", "/pedidos-produtos", ""]) {
+  test("não apanha caminhos parecidos nem as páginas que ficam", () => {
+    for (const p of [
+      "/viagens-futuro", "/viagensx", "/mapa-futuro", "/mapax", "/motoristasx", "/motoristas-novos",
+      "/outros-servicos", "/", "/dashboard", "/pedidos-produtos", "/produtos", "/clientes",
+      "/prestadores", "/financeiro", "/logs", "/chats", "/usuarios", "/configuracoes", "",
+    ]) {
       assert.equal(isTripsPath(p), false, JSON.stringify(p));
     }
   });
 });
 
 describe("tripsRedirectTarget", () => {
-  test("com viagens desligadas, /viagens (e subcaminhos) vão para os serviços", () => {
-    assert.equal(tripsRedirectTarget("/viagens", false), "/outros-servicos");
-    assert.equal(tripsRedirectTarget("/viagens/abc", false), "/outros-servicos");
+  test("com viagens desligadas, /viagens, /mapa e /motoristas (e subcaminhos) vão para os serviços", () => {
+    for (const p of ["/viagens", "/viagens/abc", "/mapa", "/motoristas", "/motoristas/abc"]) {
+      assert.equal(tripsRedirectTarget(p, false), "/outros-servicos", p);
+    }
+  });
+
+  test("com viagens ligadas, nenhuma dessas páginas redireciona", () => {
+    for (const p of ["/viagens", "/mapa", "/motoristas"]) {
+      assert.equal(tripsRedirectTarget(p, true), null, p);
+    }
+  });
+
+  test("as páginas que ficam nunca redirecionam, nem desligado", () => {
+    for (const p of ["/prestadores", "/clientes", "/financeiro", "/logs", "/pedidos-produtos", "/configuracoes"]) {
+      assert.equal(tripsRedirectTarget(p, false), null, p);
+    }
   });
 
   test("com viagens ligadas, ou noutra página, não redireciona", () => {
@@ -61,14 +87,25 @@ describe("withoutTripsItems (menu)", () => {
   const items = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/viagens", label: "Viagens" },
+    { href: "/mapa", label: "Mapa" },
+    { href: "/chats", label: "Chats" },
     { href: "/outros-servicos", label: "Serviços" },
     { href: "/pedidos-produtos", label: "Entregas" },
+    { href: "/clientes", label: "Clientes" },
+    { href: "/motoristas", label: "Motoristas" },
+    { href: "/prestadores", label: "Prestadores" },
+    { href: "/financeiro", label: "Financeiro" },
+    { href: "/logs", label: "Logs" },
+    { href: "/configuracoes", label: "Definições" },
   ];
 
-  test("desligado: tira só a entrada de viagens, mantém a ordem do resto", () => {
+  test("desligado: tira Viagens, Mapa e Motoristas e mantém a ordem do resto", () => {
     assert.deepEqual(
       withoutTripsItems(items, false).map((i) => i.href),
-      ["/dashboard", "/outros-servicos", "/pedidos-produtos"]
+      [
+        "/dashboard", "/chats", "/outros-servicos", "/pedidos-produtos", "/clientes",
+        "/prestadores", "/financeiro", "/logs", "/configuracoes",
+      ]
     );
   });
 
